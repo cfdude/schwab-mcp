@@ -13,21 +13,14 @@ export enum AuthError {
 	MISSING_PARAMETERS = 'Missing required parameters',
 	INVALID_STATE = 'Invalid state: clientId is missing',
 
-	// Server errors (500 series)
+	// Server errors (500 series) - these are generic MCP flow errors
 	AUTH_REQUEST_ERROR = 'Error processing authorization request',
 	AUTH_APPROVAL_ERROR = 'Error processing approval',
-	AUTH_CALLBACK_ERROR = 'Authorization failed',
+	AUTH_CALLBACK_ERROR = 'Authorization failed during callback processing',
 	AUTH_URL_ERROR = 'Error creating authorization URL',
-	NO_USER_ID = 'Failed to retrieve user information',
-	TOKEN_EXCHANGE_ERROR = 'Failed to exchange authorization code for tokens',
-	API_RESPONSE_ERROR = 'API request failed during authorization',
-	USER_INFO_ERROR = 'Failed to retrieve user identification information',
-
-	// Token errors
-	TOKEN_LOAD_ERROR = 'Error loading token data',
-	TOKEN_SAVE_ERROR = 'Error saving token data',
-	TOKEN_REFRESH_ERROR = 'Error refreshing token',
-	TOKEN_VALIDATION_ERROR = 'Error validating token',
+	NO_USER_ID = 'Failed to retrieve user information after Schwab auth',
+	TOKEN_EXCHANGE_ERROR = 'Failed to exchange Schwab authorization code for tokens',
+	API_RESPONSE_ERROR = 'Schwab API request failed during authorization flow',
 
 	// Cookie errors
 	COOKIE_SECRET_MISSING = 'COOKIE_SECRET is not defined. A secret key is required for signing cookies.',
@@ -65,11 +58,6 @@ const errorStatusMap: Record<AuthError, StatusCode> = {
 	[AuthError.NO_USER_ID]: StatusCode.SERVER_ERROR,
 	[AuthError.TOKEN_EXCHANGE_ERROR]: StatusCode.SERVER_ERROR,
 	[AuthError.API_RESPONSE_ERROR]: StatusCode.SERVER_ERROR,
-	[AuthError.USER_INFO_ERROR]: StatusCode.SERVER_ERROR,
-	[AuthError.TOKEN_LOAD_ERROR]: StatusCode.SERVER_ERROR,
-	[AuthError.TOKEN_SAVE_ERROR]: StatusCode.SERVER_ERROR,
-	[AuthError.TOKEN_REFRESH_ERROR]: StatusCode.SERVER_ERROR,
-	[AuthError.TOKEN_VALIDATION_ERROR]: StatusCode.SERVER_ERROR,
 	[AuthError.COOKIE_SECRET_MISSING]: StatusCode.SERVER_ERROR,
 	[AuthError.COOKIE_DECODE_ERROR]: StatusCode.BAD_REQUEST,
 	[AuthError.INVALID_COOKIE_FORMAT]: StatusCode.BAD_REQUEST,

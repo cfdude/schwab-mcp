@@ -2,7 +2,12 @@ import {
 	type OAuthHelpers,
 	type AuthRequest,
 } from '@cloudflare/workers-oauth-provider'
-import { createApiClient } from '@sudowealth/schwab-api'
+import {
+	createApiClient,
+	SchwabAuthError,
+	SchwabApiError,
+	AuthErrorCode as SchwabSDKAuthErrorCode,
+} from '@sudowealth/schwab-api'
 import { Hono } from 'hono'
 import { getEnvironment } from '../config'
 import { logger } from '../shared/logger'
@@ -285,28 +290,87 @@ app.get('/callback', async (c) => {
 
 		return Response.redirect(redirectTo)
 	} catch (error) {
-		// Enhanced error handling with context-specific errors
-		const errorMessage = error instanceof Error ? error.message : String(error)
-		const errorType =
-			errorMessage.includes('token') || errorMessage.includes('exchange')
-				? AuthError.TOKEN_EXCHANGE_ERROR
-				: errorMessage.includes('API') || errorMessage.includes('client')
-					? AuthError.API_RESPONSE_ERROR
-					: errorMessage.includes('preference') || errorMessage.includes('user')
-						? AuthError.USER_INFO_ERROR
-						: AuthError.AUTH_CALLBACK_ERROR
+		const isSchwabAuthError = error instanceof SchwabAuthError
+		const isSchwabApiErrorInstance = error instanceof SchwabApiError
 
-		const errorInfo = formatAuthError(errorType, {
+		let mcpErrorType = AuthError.AUTH_CALLBACK_ERROR // Default MCP error for this handler
+		let detailMessage = error instanceof Error ? error.message : String(error)
+		let httpStatus = 500 // Default HTTP status
+
+		if (isSchwabAuthError) {
+			const schwabAuthErr = error as SchwabAuthError
+			detailMessage = schwabAuthErr.message
+			httpStatus = schwabAuthErr.status || 400
+
+			switch (schwabAuthErr.code) {
+				case SchwabSDKAuthErrorCode.INVALID_CODE:
+				case SchwabSDKAuthErrorCode.PKCE_VERIFIER_MISSING:
+					mcpErrorType = AuthError.TOKEN_EXCHANGE_ERROR
+					detailMessage = `Token exchange failed: Invalid authorization code or PKCE issue. Details: ${schwabAuthErr.message}`
+					break
+				case SchwabSDKAuthErrorCode.TOKEN_EXPIRED:
+					mcpErrorType = AuthError.TOKEN_EXCHANGE_ERROR
+					detailMessage = `Token operation failed: Token expired, re-authentication required. Details: ${schwabAuthErr.message}`
+					httpStatus = 401
+					break
+				case SchwabSDKAuthErrorCode.UNAUTHORIZED:
+					mcpErrorType = AuthError.TOKEN_EXCHANGE_ERROR
+					detailMessage = `Authorization failed: Client unauthorized or invalid credentials. Details: ${schwabAuthErr.message}`
+					httpStatus = schwabAuthErr.status || 401
+					break
+				case SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_LOAD_FAILED:
+					mcpErrorType = AuthError.AUTH_CALLBACK_ERROR
+					detailMessage = `Critical: Failed to load token data during authorization. Details: ${schwabAuthErr.message}`
+					httpStatus = 500
+					break
+				case SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_SAVE_FAILED:
+					mcpErrorType = AuthError.AUTH_CALLBACK_ERROR
+					detailMessage = `Critical: Failed to save token data during authorization. Details: ${schwabAuthErr.message}`
+					httpStatus = 500
+					break
+				case SchwabSDKAuthErrorCode.TOKEN_VALIDATION_ERROR:
+					mcpErrorType = AuthError.AUTH_CALLBACK_ERROR
+					detailMessage = `Critical: Token validation failed during authorization. Details: ${schwabAuthErr.message}`
+					httpStatus = 500
+					break
+				case SchwabSDKAuthErrorCode.TOKEN_ENDPOINT_CONFIG_ERROR:
+					mcpErrorType = AuthError.AUTH_CALLBACK_ERROR
+					detailMessage = `Critical: Auth system configuration error. Details: ${schwabAuthErr.message}`
+					httpStatus = 500
+					break
+				case SchwabSDKAuthErrorCode.REFRESH_NEEDED:
+					mcpErrorType = AuthError.API_RESPONSE_ERROR
+					detailMessage = `Failed to refresh token during API call: ${schwabAuthErr.message}`
+					httpStatus = schwabAuthErr.status || 500
+					break
+				default:
+					mcpErrorType = AuthError.AUTH_CALLBACK_ERROR
+					detailMessage = `An authentication error occurred: ${schwabAuthErr.message}`
+					break
+			}
+		} else if (isSchwabApiErrorInstance) {
+			const schwabApiErr = error as SchwabApiError
+			mcpErrorType = AuthError.API_RESPONSE_ERROR
+			detailMessage = `API request failed during authorization: ${schwabApiErr.message}`
+			httpStatus = schwabApiErr.status || 500
+		}
+
+		const errorInfo = formatAuthError(mcpErrorType, {
 			error,
-			errorMessage,
-			errorCode: (error as any).response?.status || (error as any).code,
+			sdkErrorMessage: detailMessage,
+			sdkErrorCode: isSchwabAuthError
+				? (error as SchwabAuthError).code
+				: isSchwabApiErrorInstance
+					? (error as SchwabApiError).code
+					: undefined,
+			sdkStatus: httpStatus,
 			url: (error as any).config?.url,
 			stack: error instanceof Error ? error.stack : undefined,
 		})
 
 		logger.error(`Auth callback failed: ${errorInfo.message}`, {
 			...errorInfo.details,
-			errorType,
+			mcpErrorType,
 		})
 
 		return c.text(
