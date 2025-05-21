@@ -4,6 +4,7 @@ import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
 
 export function registerOrderTools(client: SchwabApiClient, server: McpServer) {
+	logger.info('[OrderTools] Attempting to register Order tools...');
 	createTool(client, server, {
 		name: 'getOrders',
 		schema: client.schemas.GetOrdersRequestQueryParams,
@@ -30,4 +31,5 @@ export function registerOrderTools(client: SchwabApiClient, server: McpServer) {
 			}
 		},
 	})
+	logger.info('[OrderTools] Order tools registration process completed.');
 }

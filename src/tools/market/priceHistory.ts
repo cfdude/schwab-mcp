@@ -7,6 +7,9 @@ export function registerPriceHistoryTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
+	logger.info(
+		'[PriceHistoryTools] Attempting to register PriceHistory tools...',
+	)
 	createTool(client, server, {
 		name: 'getPriceHistory',
 		schema: client.schemas.GetPriceHistoryRequestQueryParamsSchema,
@@ -50,4 +53,7 @@ export function registerPriceHistoryTools(
 			}
 		},
 	})
+	logger.info(
+		'[PriceHistoryTools] PriceHistory tools registration process completed.',
+	)
 }

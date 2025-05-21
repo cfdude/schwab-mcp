@@ -13,68 +13,37 @@ export interface StateData {
 }
 
 /**
- * Decodes a base64 string to Uint8Array.
- * @param base64Payload - The base64 encoded string.
- * @returns Uint8Array containing the decoded data.
- */
-function decodeBase64Payload(base64Payload: string): Uint8Array {
-	try {
-		// First convert base64 to string representation of binary data
-		const binaryString = atob(base64Payload)
-		// Then convert to actual Uint8Array
-		const decodedBytes = new Uint8Array(binaryString.length)
-		for (let i = 0; i < binaryString.length; i++) {
-			decodedBytes[i] = binaryString.charCodeAt(i)
-		}
-		return decodedBytes
-	} catch (e) {
-		logger.warn('Invalid base64 payload:', e)
-		throw new Error('Failed to decode base64 payload')
-	}
-}
-
-/**
  * Decodes and verifies a state parameter, returning structured data.
  * Safely handles base64 decoding before attempting to parse JSON.
  *
- * @param encoded - The base64 encoded state string.
- * @returns The parsed state data with typed access to common fields.
- * @throws Error if state decoding or validation fails.
+ * @param stateParam - The state parameter to decode and verify.
+ * @returns The parsed state data with typed access to common fields, or null if decoding fails.
  */
-export function decodeAndVerifyState(encoded: string): StateData {
+export function decodeAndVerifyState(stateParam: string): AuthRequest | null {
 	try {
-		// Step 1: Decode base64 to Uint8Array
-		const bytes = decodeBase64Payload(encoded)
+		// First URL-decode the state
+		const urlDecodedState = decodeURIComponent(stateParam)
 
-		// Step 2: Convert to string for JSON parsing
-		const jsonString = new TextDecoder().decode(bytes)
+		// Convert from base64url to base64
+		let base64State = urlDecodedState.replace(/-/g, '+').replace(/_/g, '/')
 
-		// Step 3: Parse JSON
-		const state = JSON.parse(jsonString) as StateData
+		// Add padding if needed
+		while (base64State.length % 4 !== 0) {
+			base64State += '='
+		}
 
-		// Step 4: Validate required fields
-		validateStateFields(state)
-
-		return state
-	} catch (e) {
-		logger.error('Error decoding state:', e)
-		const errorInfo = formatAuthError(AuthError.COOKIE_DECODE_ERROR)
-		throw new Error(errorInfo.message)
-	}
-}
-
-/**
- * Validates the required fields in the state object.
- * @param state - The state object to validate.
- * @throws Error if required fields are missing.
- */
-function validateStateFields(state: StateData): void {
-	// Check if we have a clientId directly or nested in oauthReqInfo
-	const clientId = state.clientId || state.oauthReqInfo?.clientId
-
-	if (!clientId) {
-		const errorInfo = formatAuthError(AuthError.CLIENT_ID_EXTRACTION_ERROR)
-		throw new Error(errorInfo.message)
+		// Now attempt to decode
+		try {
+			const decodedState = atob(base64State)
+			// Parse JSON
+			return JSON.parse(decodedState) as AuthRequest
+		} catch (error) {
+			logger.error('[ERROR] Error in base64 decoding or JSON parsing:', error)
+			return null
+		}
+	} catch (error) {
+		logger.error('[ERROR] Error decoding state in decodeAndVerifyState:', error)
+		return null
 	}
 }
 

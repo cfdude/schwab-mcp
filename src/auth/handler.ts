@@ -184,18 +184,78 @@ app.get('/callback', async (c) => {
 		// Use the validated config for auth client to ensure consistency
 		const auth = initializeSchwabAuthClient(redirectUri, loadToken, saveToken)
 
-		// Exchange the code for tokens
-		const tokenSet = await auth.exchangeCode(code)
+		// Exchange the code for tokens with enhanced error handling
+		logger.info('Exchanging authorization code for tokens')
+		let tokenSet
+		try {
+			tokenSet = await auth.exchangeCode(code, stateParam)
+		} catch (exchangeError) {
+			logger.error('Token exchange failed', {
+				error: exchangeError,
+				message:
+					exchangeError instanceof Error
+						? exchangeError.message
+						: String(exchangeError),
+			})
+			throw new Error(
+				`Token exchange failed: ${exchangeError instanceof Error ? exchangeError.message : 'unknown error'}`,
+			)
+		}
 
-		// Create API client
-		const client = await createApiClient({
-			config: { environment: 'PRODUCTION' },
-			auth,
+		// Log token information (without sensitive details)
+		logger.info('Token exchange successful', {
+			hasAccessToken: !!tokenSet?.accessToken,
+			hasRefreshToken: !!tokenSet?.refreshToken,
+			expiresAt: tokenSet?.expiresAt
+				? new Date(tokenSet.expiresAt).toISOString()
+				: 'unknown',
 		})
 
+		// Create API client
+		logger.info('Creating Schwab API client')
+		let client
+		try {
+			client = await createApiClient({
+				config: { environment: 'PRODUCTION' },
+				auth,
+			})
+		} catch (clientError) {
+			logger.error('Failed to create API client', {
+				error: clientError,
+				message:
+					clientError instanceof Error
+						? clientError.message
+						: String(clientError),
+			})
+			throw new Error(
+				`API client creation failed: ${clientError instanceof Error ? clientError.message : 'unknown error'}`,
+			)
+		}
+
 		// Fetch user info to get the Schwab user ID
-		const userPreferences =
-			await client.trader.userPreference.getUserPreference()
+		logger.info('Fetching user preferences to get Schwab user ID')
+		let userPreferences
+		try {
+			userPreferences = await client.trader.userPreference.getUserPreference()
+		} catch (preferencesError) {
+			logger.error('Failed to fetch user preferences', {
+				error: preferencesError,
+				message:
+					preferencesError instanceof Error
+						? preferencesError.message
+						: String(preferencesError),
+			})
+			throw new Error(
+				`User preferences fetch failed: ${preferencesError instanceof Error ? preferencesError.message : 'unknown error'}`,
+			)
+		}
+
+		logger.debug('User preferences response', {
+			hasPreferences: !!userPreferences,
+			hasStreamerInfo: !!userPreferences?.streamerInfo,
+			streamerInfoCount: userPreferences?.streamerInfo?.length || 0,
+		})
+
 		const userIdFromSchwab =
 			userPreferences?.streamerInfo?.[0]?.schwabClientCorrelId
 
@@ -221,12 +281,34 @@ app.get('/callback', async (c) => {
 
 		return Response.redirect(redirectTo)
 	} catch (error) {
-		const errorInfo = formatAuthError(AuthError.AUTH_CALLBACK_ERROR, {
+		// Enhanced error handling with context-specific errors
+		const errorMessage = error instanceof Error ? error.message : String(error)
+		const errorType =
+			errorMessage.includes('token') || errorMessage.includes('exchange')
+				? AuthError.TOKEN_EXCHANGE_ERROR
+				: errorMessage.includes('API') || errorMessage.includes('client')
+					? AuthError.API_RESPONSE_ERROR
+					: errorMessage.includes('preference') || errorMessage.includes('user')
+						? AuthError.USER_INFO_ERROR
+						: AuthError.AUTH_CALLBACK_ERROR
+
+		const errorInfo = formatAuthError(errorType, {
 			error,
-			errorMessage: error instanceof Error ? error.message : String(error),
+			errorMessage,
+			errorCode: (error as any).response?.status || (error as any).code,
+			url: (error as any).config?.url,
+			stack: error instanceof Error ? error.stack : undefined,
 		})
-		logger.error(errorInfo.message, errorInfo.details)
-		return c.text(errorInfo.message, errorInfo.status)
+
+		logger.error(`Auth callback failed: ${errorInfo.message}`, {
+			...errorInfo.details,
+			errorType,
+		})
+
+		return c.text(
+			`Authorization failed: ${errorInfo.message}`,
+			errorInfo.status,
+		)
 	}
 })
 

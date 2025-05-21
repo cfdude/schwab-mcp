@@ -9,6 +9,7 @@ export function registerMarketHoursTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
+	logger.info('[MarketHoursTools] Attempting to register MarketHours tools...')
 	const name = 'getMarketHours'
 	createTool(client, server, {
 		name,
@@ -77,4 +78,7 @@ export function registerMarketHoursTools(
 			}
 		},
 	})
+	logger.info(
+		'[MarketHoursTools] MarketHours tools registration process completed.',
+	)
 }

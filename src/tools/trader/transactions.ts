@@ -7,6 +7,7 @@ export function registerTransactionTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
+	logger.info('[TransactionTools] Attempting to register Transaction tools...');
 	createTool(client, server, {
 		name: 'getTransactions',
 		schema: client.schemas.GetTransactionsRequestQueryParams,
@@ -64,4 +65,5 @@ export function registerTransactionTools(
 			}
 		},
 	})
+	logger.info('[TransactionTools] Transaction tools registration process completed.');
 }

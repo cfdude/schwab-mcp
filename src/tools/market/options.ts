@@ -7,6 +7,7 @@ export function registerOptionsTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
+	logger.info('[OptionsTools] Attempting to register Options tools...')
 	createTool(client, server, {
 		name: 'getOptionChain',
 		schema: client.schemas.GetOptionChainRequestQueryParamsSchema,
@@ -80,4 +81,5 @@ export function registerOptionsTools(
 			}
 		},
 	})
+	logger.info('[OptionsTools] Options tools registration process completed.')
 }

@@ -167,15 +167,12 @@ export async function redirectToSchwab(
 		const auth = initializeSchwabAuthClient(redirectUri)
 
 		// Get the authorization URL with state parameter
-		// Create a custom URL with state parameter since EnhancedTokenManager doesn't support it directly
-		const { authUrl: baseAuthUrl } = auth.getAuthorizationUrl({
-			// scope is the only property allowed in the options
+		// Pass state to EnhancedTokenManager's getAuthorizationUrl
+		// The EnhancedTokenManager will handle embedding our state in the authUrl
+		// along with any PKCE code verifier it generates internally
+		const { authUrl } = await auth.getAuthorizationUrl({
+			state: btoa(JSON.stringify(oauthReqInfo)),
 		})
-
-		// Manually add the state parameter to the URL
-		const authUrlObj = new URL(baseAuthUrl)
-		authUrlObj.searchParams.append('state', btoa(JSON.stringify(oauthReqInfo)))
-		const authUrl = authUrlObj.toString()
 
 		// Create redirect response with any additional headers
 		if (Object.keys(headers).length > 0) {

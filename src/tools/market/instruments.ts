@@ -7,6 +7,7 @@ export function registerInstrumentTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
+	logger.info('[InstrumentTools] Attempting to register Instrument tools...')
 	createTool(client, server, {
 		name: 'searchInstruments',
 		schema: client.schemas.GetInstrumentsRequestQueryParamsSchema,
@@ -38,4 +39,7 @@ export function registerInstrumentTools(
 			}
 		},
 	})
+	logger.info(
+		'[InstrumentTools] Instrument tools registration process completed.',
+	)
 }

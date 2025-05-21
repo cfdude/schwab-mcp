@@ -19,6 +19,9 @@ export enum AuthError {
 	AUTH_CALLBACK_ERROR = 'Authorization failed',
 	AUTH_URL_ERROR = 'Error creating authorization URL',
 	NO_USER_ID = 'Failed to retrieve user information',
+	TOKEN_EXCHANGE_ERROR = 'Failed to exchange authorization code for tokens',
+	API_RESPONSE_ERROR = 'API request failed during authorization',
+	USER_INFO_ERROR = 'Failed to retrieve user identification information',
 
 	// Token errors
 	TOKEN_LOAD_ERROR = 'Error loading token data',
@@ -60,6 +63,9 @@ export const errorStatusMap: Record<AuthError, StatusCode> = {
 	[AuthError.AUTH_CALLBACK_ERROR]: StatusCode.SERVER_ERROR,
 	[AuthError.AUTH_URL_ERROR]: StatusCode.SERVER_ERROR,
 	[AuthError.NO_USER_ID]: StatusCode.SERVER_ERROR,
+	[AuthError.TOKEN_EXCHANGE_ERROR]: StatusCode.SERVER_ERROR,
+	[AuthError.API_RESPONSE_ERROR]: StatusCode.SERVER_ERROR,
+	[AuthError.USER_INFO_ERROR]: StatusCode.SERVER_ERROR,
 	[AuthError.TOKEN_LOAD_ERROR]: StatusCode.SERVER_ERROR,
 	[AuthError.TOKEN_SAVE_ERROR]: StatusCode.SERVER_ERROR,
 	[AuthError.TOKEN_REFRESH_ERROR]: StatusCode.SERVER_ERROR,

@@ -1,51 +1,22 @@
 import {
-	type EnhancedTokenManager,
-	TokenPersistenceEvent,
-	type TokenData as ApiTokenData,
+	type EnhancedTokenManager, // Directly use EnhancedTokenManager type
+	TokenPersistenceEvent, // This enum is from EnhancedTokenManager, check its export
+	type TokenData as SchwabApiTokenData, // Alias to avoid conflict
 } from '@sudowealth/schwab-api'
 import { logger } from '../shared/logger'
 import { type CodeFlowTokenData, type TokenLifecycleEvent } from './client'
 import { type ITokenManager } from './tokenInterface'
 
-// Use CodeFlowTokenData which is exported instead of TokenData
-/**
- * Convert from API TokenData to CodeFlowTokenData
- */
-function convertToCodeFlowTokenData(
-	data: ApiTokenData | null,
-): CodeFlowTokenData | null {
-	if (!data) return null
+// Use CodeFlowTokenData for internal state, map from/to SchwabApiTokenData when interacting with EnhancedTokenManager
+type InternalTokenData = CodeFlowTokenData
 
-	return {
-		accessToken: data.accessToken,
-		refreshToken: data.refreshToken || '',
-		expiresAt: data.expiresAt || 0,
-	}
-}
-
-// Use CodeFlowTokenData internally for all token operations
-type TokenData = CodeFlowTokenData
-
-/**
- * Token state machine states
- *
- * This enum represents all possible states the token can be in:
- * - uninitialized: Initial state with no token data (also used during initialization)
- * - valid: Token is loaded and valid (not expired)
- * - expired: Token is loaded but expired or will expire soon
- * - refreshing: Token refresh is in progress
- * - error: An error occurred during token operations
- */
 type TokenState =
 	| { status: 'uninitialized'; isInitializing?: boolean }
-	| { status: 'valid'; tokenData: TokenData }
-	| { status: 'expired'; tokenData: TokenData }
-	| { status: 'refreshing'; tokenData: TokenData }
+	| { status: 'valid'; tokenData: InternalTokenData }
+	| { status: 'expired'; tokenData: InternalTokenData }
+	| { status: 'refreshing'; tokenData: InternalTokenData }
 	| { status: 'error'; error: Error }
 
-/**
- * Events emitted by the token state machine
- */
 export type TokenStateEvent = {
 	type: 'state-change' | 'refresh-attempt' | 'reconnect-attempt'
 	previousState?: string
@@ -56,83 +27,47 @@ export type TokenStateEvent = {
 	metadata?: Record<string, any>
 }
 
-/**
- * Token state event listener type
- */
 export type TokenStateEventListener = (event: TokenStateEvent) => void
 
-/**
- * Result of token data validation
- */
 interface ValidateTokenResult {
 	valid: boolean
-	tokenData?: TokenData
+	tokenData?: InternalTokenData
 	reason?: string
 }
 
-/**
- * Token state machine implementation that adapts EnhancedTokenManager to ITokenManager
- *
- * This class is the single source of truth for token state and handles all
- * aspects of token lifecycle including initialization, validation, refreshing,
- * and reconnection. It delegates core token operations to EnhancedTokenManager
- * while maintaining explicit state tracking for MCP-specific purposes.
- */
 export class TokenStateMachine implements ITokenManager {
 	private state: TokenState = { status: 'uninitialized' }
 	private tokenClient: EnhancedTokenManager
 	// Event handlers mapping for persistence events
 	private persistenceEventHandlers: ((
 		event: TokenPersistenceEvent,
-		data: TokenData | null,
+		data: InternalTokenData | null,
 		metadata?: Record<string, any>,
 	) => void)[] = []
 	private lastReconnectTime = 0
 	private stateEventListeners: TokenStateEventListener[] = []
-	private refreshRetryCount = 0
-	private maxRefreshRetries = 3
+	// refreshRetryCount and maxRefreshRetries are handled by EnhancedTokenManager
 
-	/**
-	 * Internal methods for state transitions to ensure consistent state updates
-	 */
 	private transitionToUninitialized(isInitializing: boolean = false): void {
 		const previousState = this.state.status
 		this.state = { status: 'uninitialized', isInitializing }
-
 		const stateDescription = isInitializing ? 'initializing' : 'uninitialized'
 		logger.info(`Token state: ${stateDescription}`)
-
 		this.emitStateEvent({
 			type: 'state-change',
 			previousState,
 			newState: 'uninitialized',
 			timestamp: Date.now(),
-			metadata: {
-				isInitializing,
-			},
+			metadata: { isInitializing },
 		})
 	}
 
-	private transitionToValid(tokenData: TokenData | null): void {
-		if (!tokenData) {
-			this.transitionToError(
-				new Error('Cannot transition to valid state with null token data'),
-			)
-			return
-		}
-
-		// Convert to CodeFlowTokenData before using
-		const codeFlowTokenData = convertToCodeFlowTokenData(tokenData)
-		if (!codeFlowTokenData) {
-			this.transitionToError(
-				new Error('Failed to convert token data to CodeFlowTokenData'),
-			)
-			return
-		}
+	private transitionToValid(tokenData: InternalTokenData): void {
 		const previousState = this.state.status
-		this.state = { status: 'valid', tokenData: codeFlowTokenData }
-		logger.info('Token state: valid')
-
+		this.state = { status: 'valid', tokenData }
+		logger.info('Token state: valid', {
+			expiresIn: Math.floor((tokenData.expiresAt - Date.now()) / 1000),
+		})
 		this.emitStateEvent({
 			type: 'state-change',
 			previousState,
@@ -145,26 +80,10 @@ export class TokenStateMachine implements ITokenManager {
 		})
 	}
 
-	private transitionToExpired(tokenData: TokenData | null): void {
-		if (!tokenData) {
-			this.transitionToError(
-				new Error('Cannot transition to expired state with null token data'),
-			)
-			return
-		}
-
-		// Convert to CodeFlowTokenData before using
-		const codeFlowTokenData = convertToCodeFlowTokenData(tokenData)
-		if (!codeFlowTokenData) {
-			this.transitionToError(
-				new Error('Failed to convert token data to CodeFlowTokenData'),
-			)
-			return
-		}
+	private transitionToExpired(tokenData: InternalTokenData): void {
 		const previousState = this.state.status
-		this.state = { status: 'expired', tokenData: codeFlowTokenData }
+		this.state = { status: 'expired', tokenData }
 		logger.info('Token state: expired')
-
 		this.emitStateEvent({
 			type: 'state-change',
 			previousState,
@@ -177,26 +96,10 @@ export class TokenStateMachine implements ITokenManager {
 		})
 	}
 
-	private transitionToRefreshing(tokenData: TokenData | null): void {
-		if (!tokenData) {
-			this.transitionToError(
-				new Error('Cannot transition to refreshing state with null token data'),
-			)
-			return
-		}
-
-		// Convert to CodeFlowTokenData before using
-		const codeFlowTokenData = convertToCodeFlowTokenData(tokenData)
-		if (!codeFlowTokenData) {
-			this.transitionToError(
-				new Error('Failed to convert token data to CodeFlowTokenData'),
-			)
-			return
-		}
+	private transitionToRefreshing(tokenData: InternalTokenData): void {
 		const previousState = this.state.status
-		this.state = { status: 'refreshing', tokenData: codeFlowTokenData }
+		this.state = { status: 'refreshing', tokenData }
 		logger.info('Token state: refreshing')
-
 		this.emitStateEvent({
 			type: 'state-change',
 			previousState,
@@ -212,8 +115,7 @@ export class TokenStateMachine implements ITokenManager {
 	private transitionToError(error: Error): void {
 		const previousState = this.state.status
 		this.state = { status: 'error', error }
-		logger.error('Token state: error', { error })
-
+		logger.error('Token state: error', { errorMessage: error.message })
 		this.emitStateEvent({
 			type: 'state-change',
 			previousState,
@@ -223,38 +125,26 @@ export class TokenStateMachine implements ITokenManager {
 		})
 	}
 
-	/**
-	 * Emit a state event to all registered listeners
-	 */
 	private emitStateEvent(event: TokenStateEvent): void {
-		// Add timestamp if not provided
-		if (!event.timestamp) {
-			event.timestamp = Date.now()
-		}
-
-		// Notify all listeners
+		if (!event.timestamp) event.timestamp = Date.now()
 		for (const listener of this.stateEventListeners) {
 			try {
 				listener(event)
 			} catch (error) {
-				logger.error('Error in token state event listener', { error })
+				logger.error('Error in token state event listener', {
+					error: error instanceof Error ? error.message : String(error),
+				})
 			}
 		}
 	}
 
-	/**
-	 * Add a listener for token state events
-	 */
 	public onStateEvent(listener: TokenStateEventListener): void {
 		this.stateEventListeners.push(listener)
 	}
 
-	/**
-	 * Remove a listener for token state events
-	 */
 	public offStateEvent(listener: TokenStateEventListener): void {
 		this.stateEventListeners = this.stateEventListeners.filter(
-			(l: TokenStateEventListener) => l !== listener,
+			(l) => l !== listener,
 		)
 	}
 
@@ -267,7 +157,7 @@ export class TokenStateMachine implements ITokenManager {
 		this.addPersistenceEventHandler(
 			(
 				event: TokenPersistenceEvent,
-				data: TokenData | null,
+				data: InternalTokenData | null,
 				metadata?: Record<string, any>,
 			) => {
 				let lifecycleEventType: TokenLifecycleEvent['type'] | null = null
@@ -383,66 +273,58 @@ export class TokenStateMachine implements ITokenManager {
 	 * Handles token lifecycle events from the token client or internal transitions
 	 */
 	private handleTokenEvent(event: TokenLifecycleEvent): void {
-		// If we have token data, make sure it's CodeFlowTokenData
-		if (
-			event.tokenData &&
-			!(event.tokenData as CodeFlowTokenData).refreshToken
-		) {
-			event.tokenData = convertToCodeFlowTokenData(
-				event.tokenData as ApiTokenData,
-			) as TokenData
-		}
-		logger.info(`Token event: ${event.type}`)
-
+		logger.info(`TokenStateMachine handling lifecycle event: ${event.type}`)
 		switch (event.type) {
 			case 'load':
+			case 'refresh': // Treat refresh success similarly to a successful load
 				if (event.tokenData) {
 					const validationResult = this.validateTokenData(event.tokenData)
-
 					if (validationResult.valid && validationResult.tokenData) {
 						const validTokenData = validationResult.tokenData
-
-						if (this.isTokenExpired(validTokenData)) {
-							logger.info('Loaded token is expired, updating state')
+						if (this.isTokenDataExpired(validTokenData)) {
+							logger.info(
+								`Loaded/Refreshed token is expired, transitioning to expired state.`,
+							)
 							this.transitionToExpired(validTokenData)
 						} else {
-							logger.info('Loaded token is valid')
+							logger.info(`Loaded/Refreshed token is valid.`)
 							this.transitionToValid(validTokenData)
 						}
-					} else if (validationResult.reason) {
+					} else {
 						logger.warn(
-							`Token load event validation failed: ${validationResult.reason}`,
+							`Token ${event.type} event: validation failed: ${validationResult.reason}`,
+						)
+						this.transitionToError(
+							new Error(
+								validationResult.reason ||
+									`Token validation failed during ${event.type}`,
+							),
 						)
 					}
+				} else {
+					logger.warn(`Token ${event.type} event: no tokenData provided.`)
+					this.transitionToError(
+						new Error(`No tokenData in ${event.type} event`),
+					)
 				}
 				break
-
-			case 'refresh':
-				if (event.tokenData) {
-					const validationResult = this.validateTokenData(event.tokenData)
-
-					if (validationResult.valid && validationResult.tokenData) {
-						logger.info('Refreshed token received, updating state')
-						this.transitionToValid(validationResult.tokenData)
-					} else if (validationResult.reason) {
-						logger.warn(
-							`Token refresh event validation failed: ${validationResult.reason}`,
-						)
-					}
-				}
-				break
-
-			case 'expire':
+			case 'expire': // This event might be triggered externally or by a timer
 				if (this.state.status === 'valid' && 'tokenData' in this.state) {
-					logger.info('Token expire event received')
+					logger.info('Token expire event received, transitioning to expired.')
 					this.transitionToExpired(this.state.tokenData)
 				}
 				break
-
 			case 'error':
 				if (event.error) {
-					logger.warn('Token error event received', { error: event.error })
+					logger.warn('Token error event received', {
+						errorMessage: event.error.message,
+					})
 					this.transitionToError(event.error)
+				} else {
+					logger.warn(
+						'Token error event received without specific error object.',
+					)
+					this.transitionToError(new Error('Unknown token error event'))
 				}
 				break
 		}
@@ -453,84 +335,36 @@ export class TokenStateMachine implements ITokenManager {
 	 * Leverages EnhancedTokenManager's validation when available
 	 */
 	private validateTokenData(
-		tokenData: ApiTokenData | TokenData | null,
+		tokenData: SchwabApiTokenData | InternalTokenData | null,
 	): ValidateTokenResult {
-		try {
-			// Convert TokenData to CodeFlowTokenData if necessary
-			const convertedTokenData = convertToCodeFlowTokenData(
-				tokenData as ApiTokenData,
-			)
+		if (!tokenData) {
+			return { valid: false, reason: 'Token data is null or undefined' }
+		}
 
-			// Custom implementation since validateToken is not available on EnhancedTokenManager
-			// Implement basic validation logic
-			const enhancedValidation = this.customValidateToken(convertedTokenData)
-
-			if (!enhancedValidation.valid) {
-				return {
-					valid: false,
-					reason: enhancedValidation.reason || 'Token validation failed',
-				}
+		// Ensure our specific required fields are present and correctly typed
+		if (!tokenData.accessToken || typeof tokenData.accessToken !== 'string') {
+			return { valid: false, reason: 'Missing or invalid accessToken' }
+		}
+		if (!tokenData.refreshToken || typeof tokenData.refreshToken !== 'string') {
+			// Allow empty refresh token if ETM considers it valid, but log.
+			if (tokenData.refreshToken !== '') {
+				logger.warn(
+					"Refresh token is present but not a non-empty string. This might be acceptable depending on ETM's logic.",
+				)
 			}
+		}
+		if (typeof tokenData.expiresAt !== 'number' || tokenData.expiresAt <= 0) {
+			return { valid: false, reason: 'Missing or invalid expiresAt' }
+		}
 
-			// If valid, still ensure our specific required fields are present
-			const missingFields = []
-			if (!tokenData?.accessToken) missingFields.push('accessToken')
-			if (!tokenData?.refreshToken) missingFields.push('refreshToken')
-			if (!tokenData?.expiresAt) missingFields.push('expiresAt')
-
-			if (missingFields.length > 0) {
-				return {
-					valid: false,
-					reason: `Token data missing required fields: ${missingFields.join(', ')}`,
-				}
-			}
-
-			// All validation passed, return validated token data
-			return {
-				valid: true,
-				tokenData: {
-					accessToken: tokenData?.accessToken || '',
-					refreshToken: tokenData?.refreshToken || '',
-					expiresAt: tokenData?.expiresAt || 0,
-				} as CodeFlowTokenData,
-			}
-		} catch (error) {
-			// If enhanced validation throws an error, fall back to basic validation
-			logger.warn('Enhanced token validation failed', { error })
-
-			// Basic validation (fallback)
-			// First check for null/undefined
-			if (!tokenData) {
-				return {
-					valid: false,
-					reason: 'Token data is null or undefined',
-				}
-			}
-
-			// Check for required fields
-			const missingFields = []
-			if (!tokenData?.accessToken) missingFields.push('accessToken')
-			if (!tokenData?.refreshToken) missingFields.push('refreshToken')
-			if (!tokenData?.expiresAt) missingFields.push('expiresAt')
-
-			if (missingFields.length > 0) {
-				return {
-					valid: false,
-					reason: `Token data missing required fields: ${missingFields.join(', ')}`,
-				}
-			}
-
-			// All validation passed, return validated token data
-			const validTokenData: CodeFlowTokenData = {
-				accessToken: tokenData?.accessToken || '',
-				refreshToken: tokenData?.refreshToken || '',
-				expiresAt: tokenData?.expiresAt || 0,
-			}
-
-			return {
-				valid: true,
-				tokenData: validTokenData,
-			}
+		return {
+			valid: true,
+			tokenData: {
+				// Ensure it's mapped to InternalTokenData
+				accessToken: tokenData.accessToken,
+				refreshToken: tokenData.refreshToken || '',
+				expiresAt: tokenData.expiresAt,
+			},
 		}
 	}
 
@@ -538,7 +372,7 @@ export class TokenStateMachine implements ITokenManager {
 	 * Checks if a token is expired or will expire soon
 	 * Uses EnhancedTokenManager's isAccessTokenNearingExpiration
 	 */
-	private isTokenExpired(tokenData: TokenData): boolean {
+	private isTokenExpired(tokenData: InternalTokenData): boolean {
 		// Default refresh threshold: 5 minutes (300000ms)
 		const refreshThresholdMs = 300000
 
@@ -560,78 +394,96 @@ export class TokenStateMachine implements ITokenManager {
 		}
 	}
 
-	/**
-	 * Updates the token client
-	 */
 	public updateTokenClient(tokenClient: EnhancedTokenManager): void {
-		logger.info('Updating token client')
+		logger.info('Updating token client in TokenStateMachine')
 		this.tokenClient = tokenClient
+		// Note: Re-subscribing to events or re-passing the event handler would need to happen here
+		// if the onTokenEvent mechanism for ETM was used via its constructor.
+		// For now, this just updates the client instance.
 	}
 
-	/**
-	 * Initialize the token state
-	 *
-	 * This method loads token data from EnhancedTokenManager and transitions to the appropriate state.
-	 */
 	public async initialize(): Promise<boolean> {
-		// If already in a valid or refreshing state, don't re-initialize
 		if (
 			this.state.status !== 'uninitialized' &&
 			this.state.status !== 'error'
 		) {
+			logger.info(`Initialization skipped, current state: ${this.state.status}`)
 			return this.state.status === 'valid'
 		}
-
-		// If already initializing, don't start a parallel initialization
 		if (this.state.status === 'uninitialized' && this.state.isInitializing) {
 			logger.info('Initialization already in progress')
-			return false
+			return false // Or await a promise representing the ongoing initialization
 		}
-
-		// Mark as initializing
 		this.transitionToUninitialized(true)
-
 		try {
-			// Use EnhancedTokenManager to get token data
-			const apiTokenData = await this.tokenClient.getTokenData()
-			const validationResult = this.validateTokenData(apiTokenData)
+			logger.debug(
+				'TokenStateMachine: Calling ETM.getTokenData() for initialization.',
+			)
+			const etmTokenData = await this.tokenClient.getTokenData()
+			const validationResult = this.validateTokenData(etmTokenData)
 
-			if (!validationResult.valid) {
+			if (!validationResult.valid || !validationResult.tokenData) {
 				logger.info(
-					`No valid token data available: ${validationResult.reason || 'unknown reason'}`,
+					`Initialization: No valid token data from ETM: ${validationResult.reason || 'unknown'}`,
 				)
 				this.transitionToUninitialized(false)
 				return false
 			}
-
-			// We know tokenData is valid at this point
-			const validTokenData = validationResult.tokenData!
-
-			if (this.isTokenExpired(validTokenData)) {
-				logger.info('Token is expired, attempting refresh')
-				this.transitionToExpired(validTokenData)
+			const internalTokenData = validationResult.tokenData
+			if (this.isTokenDataExpired(internalTokenData)) {
+				logger.info('Initialization: Token is expired, attempting refresh.')
+				this.transitionToExpired(internalTokenData)
 				return await this.refresh()
 			}
-
-			logger.info('Token is valid')
-			this.transitionToValid(validTokenData)
+			logger.info('Initialization: Token is valid.')
+			this.transitionToValid(internalTokenData)
 			return true
 		} catch (error) {
-			logger.error('Error initializing token state', { error })
+			const message = error instanceof Error ? error.message : String(error)
+			logger.error('Error initializing token state', { error: message })
 			this.transitionToError(
-				error instanceof Error ? error : new Error(String(error)),
+				error instanceof Error ? error : new Error(message),
 			)
 			return false
 		}
 	}
 
-	/**
-	 * Get the current access token, ensuring it's valid first
-	 * Directly leverages EnhancedTokenManager's getAccessToken
-	 */
 	public async getAccessToken(): Promise<string | null> {
-		// If in valid state, short-circuit for performance
-		// and ensure tokenData is actually present (type guard)
+		logger.debug(`getAccessToken called. Current state: ${this.state.status}`)
+		if (
+			this.state.status === 'valid' &&
+			'tokenData' in this.state &&
+			this.state.tokenData
+		) {
+			// Before returning, quickly check if it's now expired according to our definition
+			if (this.isTokenDataExpired(this.state.tokenData)) {
+				logger.info(
+					'Token was valid, but now considered expired. Attempting refresh via ensureValidToken.',
+				)
+				await this.ensureValidToken() // This will trigger refresh if needed
+				// After ensureValidToken, re-check state
+				if (
+					this.state.status === 'valid' &&
+					'tokenData' in this.state &&
+					this.state.tokenData
+				) {
+					return this.state.tokenData.accessToken
+				} else {
+					logger.warn(
+						'Token still not valid after ensureValidToken in getAccessToken flow.',
+					)
+					return null
+				}
+			}
+			return this.state.tokenData.accessToken
+		}
+
+		const isValidOrCanBeMadeValid = await this.ensureValidToken()
+		if (!isValidOrCanBeMadeValid) {
+			logger.warn('getAccessToken: ensureValidToken returned false.')
+			return null
+		}
+		// After ensureValidToken, state should be 'valid' if successful
 		if (
 			this.state.status === 'valid' &&
 			'tokenData' in this.state &&
@@ -639,287 +491,174 @@ export class TokenStateMachine implements ITokenManager {
 		) {
 			return this.state.tokenData.accessToken
 		}
-
-		// Otherwise, try to ensure we have a valid token first by calling ensureValidToken.
-		// ensureValidToken will attempt to initialize or refresh if necessary.
-		const isValidOrCanBeMadeValid = await this.ensureValidToken()
-		if (!isValidOrCanBeMadeValid) {
-			logger.warn(
-				'getAccessToken: ensureValidToken returned false, cannot provide token.',
-			)
-			return null
-		}
-
-		// After ensureValidToken, if it was successful, the state should ideally be 'valid'.
-		// We can now attempt to get the token directly from EnhancedTokenManager,
-		// which might do its own final checks or refresh.
+		// Fallback if state is somehow not 'valid' after a successful ensureValidToken
+		logger.warn(
+			`getAccessToken: State is ${this.state.status} after successful ensureValidToken. Attempting direct ETM call.`,
+		)
 		try {
-			const token = await this.tokenClient.getAccessToken()
-
-			// If EnhancedTokenManager provided a token, and our state machine isn't 'valid'
-			// (or became invalid during the await), update our state.
-			if (token) {
-				// If our state isn't 'valid' or if the tokenData is stale, refresh our state.
-				// This is important because ensureValidToken might have transitioned the state.
-				if (
-					this.state.status !== 'valid' ||
-					(this.state.status === 'valid' &&
-						'tokenData' in this.state &&
-						this.state.tokenData.accessToken !== token)
-				) {
-					const currentTokenDataFromClient =
-						await this.tokenClient.getTokenData()
-					if (currentTokenDataFromClient) {
-						// Convert to our internal token format
-						const validationResult = this.validateTokenData(
-							currentTokenDataFromClient,
-						)
-						if (validationResult.valid && validationResult.tokenData) {
-							// Only transition if the new token data is actually different or state was not valid
-							if (
-								this.state.status !== 'valid' ||
-								(this.state.status === 'valid' &&
-									'tokenData' in this.state &&
-									JSON.stringify(this.state.tokenData) !==
-										JSON.stringify(validationResult.tokenData))
-							) {
-								this.transitionToValid(validationResult.tokenData)
-							}
-						} else {
-							logger.warn(
-								'getAccessToken: Token from client was non-null, but failed MCP validation.',
-								{ reason: validationResult.reason },
-							)
-						}
+			const tokenFromETM = await this.tokenClient.getAccessToken()
+			if (tokenFromETM) {
+				// Force update our internal state if ETM provides a token
+				const currentTokenDataFromClient = await this.tokenClient.getTokenData()
+				if (currentTokenDataFromClient) {
+					const validation = this.validateTokenData(currentTokenDataFromClient)
+					if (validation.valid && validation.tokenData) {
+						this.transitionToValid(validation.tokenData)
 					}
 				}
-			} else {
-				// If token is null, ensure our state reflects that we don't have a valid token.
-				// This might happen if ensureValidToken thought it was okay, but getAccessToken then failed.
-				if (this.state.status === 'valid') {
-					logger.warn(
-						'getAccessToken: EnhancedTokenManager returned null, but state was valid. Re-evaluating state.',
-					)
-					// Potentially transition to error or re-initialize, or just log.
-					// For now, we'll rely on the next call to ensureValidToken to fix it.
-				}
 			}
-			return token
-		} catch (error) {
-			logger.error('Error getting access token from EnhancedTokenManager', {
-				error,
-			})
-			// Transition to error state if fetching token fails catastrophically
+			return tokenFromETM
+		} catch (etmError) {
+			const message =
+				etmError instanceof Error ? etmError.message : String(etmError)
+			logger.error(
+				'getAccessToken: Error from ETM.getAccessToken() fallback.',
+				{ error: message },
+			)
 			this.transitionToError(
-				error instanceof Error ? error : new Error(String(error)),
+				etmError instanceof Error ? etmError : new Error(message),
 			)
 			return null
 		}
 	}
 
-	/**
-	 * Ensure the token is valid, refreshing if necessary
-	 *
-	 * This method is the central validation point that ensures a valid token is available.
-	 * It delegates to EnhancedTokenManager for core token operations.
-	 */
 	public async ensureValidToken(): Promise<boolean> {
-		// Handle all possible states explicitly
+		logger.debug(`ensureValidToken called. Current state: ${this.state.status}`)
 		switch (this.state.status) {
 			case 'uninitialized':
-				// If initialization is already in progress, we should wait
 				if (this.state.isInitializing) {
-					logger.info('Token initialization in progress, waiting')
-					return false
+					logger.info('ensureValidToken: Initialization in progress.')
+					return false // Or await a promise
 				}
 				return await this.initialize()
-
 			case 'valid':
-				// Double-check token expiration
 				if (
 					'tokenData' in this.state &&
-					this.isTokenExpired(this.state.tokenData)
+					this.isTokenDataExpired(this.state.tokenData)
 				) {
-					logger.info('Token is expired despite valid state, refreshing')
+					logger.info(
+						'ensureValidToken: Token in valid state but expired, refreshing.',
+					)
 					this.transitionToExpired(this.state.tokenData)
 					return await this.refresh()
 				}
 				return true
-
 			case 'expired':
-				// Refresh the token
-				logger.info('Token is expired, refreshing')
+				logger.info('ensureValidToken: Token in expired state, refreshing.')
 				return await this.refresh()
-
 			case 'error':
-				// Attempt recovery through initialization
 				logger.warn(
-					'Token in error state, attempting recovery via initialization',
+					'ensureValidToken: Token in error state, attempting re-initialization.',
 				)
 				return await this.initialize()
-
 			case 'refreshing':
-				// Already in progress
-				logger.info('Token refresh already in progress, waiting')
-				return false
-
-			default: {
-				// This should never happen if all state types are properly handled
-				// For TypeScript exhaustiveness checking, use a type assertion
+				logger.info('ensureValidToken: Refresh already in progress.')
+				// This should ideally await the ongoing refresh promise if one exists
+				return false // For now, indicate not yet valid
+			default:
 				const unknownState = this.state as { status: string }
-				logger.error(`Unhandled token state: ${unknownState.status}`)
+				logger.error(
+					`Unhandled token state in ensureValidToken: ${unknownState.status}`,
+				)
 				return false
-			}
 		}
 	}
 
-	/**
-	 * Refresh the token
-	 *
-	 * Leverages EnhancedTokenManager's refreshIfNeeded method,
-	 * while maintaining the TokenStateMachine state for MCP-specific purposes.
-	 */
 	public async refresh(): Promise<boolean> {
-		// Only allow refresh from valid or expired states to maintain consistency
-		if (this.state.status !== 'expired' && this.state.status !== 'valid') {
-			logger.warn('Cannot refresh from current state', {
-				state: this.state.status,
-			})
-			return false
+		if (!(this.state.status === 'expired' || this.state.status === 'valid')) {
+			logger.warn(
+				`Refresh called from invalid state: ${this.state.status}. Attempting ensureValidToken first.`,
+			)
+			// Try to get to a refreshable state
+			const canProceed = await this.ensureValidToken()
+			if (
+				!canProceed ||
+				!(['expired', 'valid'] as string[]).includes(this.state.status)
+			) {
+				logger.error(
+					`Refresh: Could not reach a refreshable state. Current state: ${this.state.status}`,
+				)
+				return false
+			}
+		}
+		if (!('tokenData' in this.state) || !this.state.tokenData) {
+			logger.error(
+				'Refresh: No tokenData available in current state to transition to refreshing.',
+			)
+			return await this.initialize() // Try to recover
 		}
 
-		if (!('tokenData' in this.state)) {
-			return false
-		}
-
-		// Track the current token data and update state to refreshing
 		const currentTokenData = this.state.tokenData
 		this.transitionToRefreshing(currentTokenData)
-
-		// Reset retry count for this explicit refresh call
-		this.refreshRetryCount = 0
+		this.emitStateEvent({
+			type: 'refresh-attempt',
+			timestamp: Date.now(),
+			newState: this.state.status,
+			metadata: { method: 'ETM.refreshIfNeeded' },
+		})
 
 		try {
-			// Emit refresh attempt event
-			this.emitStateEvent({
-				type: 'refresh-attempt',
-				timestamp: Date.now(),
-				newState: this.state.status,
-				metadata: { method: 'refreshIfNeeded' },
-			})
-
-			// Use EnhancedTokenManager to refresh the token
-			// force: true ensures that refresh happens even if the token isn't expired yet
-			const refreshedTokenData = await this.tokenClient.refreshIfNeeded({
+			logger.debug(
+				'TokenStateMachine: Calling ETM.refreshIfNeeded({ force: true })',
+			)
+			const refreshedSchwabTokenData = await this.tokenClient.refreshIfNeeded({
 				force: true,
 			})
+			// ETM's refreshIfNeeded returns SchwabApiTokenData
+			const validationResult = this.validateTokenData(refreshedSchwabTokenData)
 
-			if (refreshedTokenData) {
-				// Validate the refreshed token data
-				const validationResult = this.validateTokenData(refreshedTokenData)
-
-				if (validationResult.valid && validationResult.tokenData) {
-					// Token refresh successful
-					this.transitionToValid(validationResult.tokenData)
-
-					// Emit success event
-					this.emitStateEvent({
-						type: 'refresh-attempt',
-						timestamp: Date.now(),
-						success: true,
-						metadata: {
-							method: 'refreshIfNeeded',
-							hasTokenData: true,
-						},
-					})
-
-					return true
-				} else {
-					// Token validation failed
-					const errorMessage =
-						validationResult.reason || 'Invalid token data after refresh'
-					logger.error(errorMessage)
-
-					// Emit failure event
-					this.emitStateEvent({
-						type: 'refresh-attempt',
-						timestamp: Date.now(),
-						success: false,
-						error: new Error(errorMessage),
-						metadata: {
-							method: 'refreshIfNeeded',
-							validationFailed: true,
-						},
-					})
-
-					this.transitionToError(new Error(errorMessage))
-					return false
-				}
+			if (validationResult.valid && validationResult.tokenData) {
+				logger.info('Refresh successful, token is valid.')
+				this.transitionToValid(validationResult.tokenData)
+				this.emitStateEvent({
+					type: 'refresh-attempt',
+					timestamp: Date.now(),
+					success: true,
+					metadata: { method: 'ETM.refreshIfNeeded', hasTokenData: true },
+				})
+				return true
 			} else {
-				// No token data returned
-				logger.error('No token data returned from refreshIfNeeded')
-
-				// Emit failure event
+				const reason =
+					validationResult.reason || 'Invalid token data after ETM refresh'
+				logger.error(`Refresh failed: ${reason}`)
+				this.transitionToError(new Error(reason))
 				this.emitStateEvent({
 					type: 'refresh-attempt',
 					timestamp: Date.now(),
 					success: false,
-					error: new Error('No token data returned from refreshIfNeeded'),
-					metadata: {
-						method: 'refreshIfNeeded',
-						noTokenData: true,
-					},
+					error: new Error(reason),
+					metadata: { method: 'ETM.refreshIfNeeded', validationFailed: true },
 				})
-
-				this.transitionToError(
-					new Error('No token data returned from refreshIfNeeded'),
-				)
 				return false
 			}
 		} catch (error) {
-			logger.error('Error during token refresh operation', { error })
-
-			// Emit failure event
+			const message = error instanceof Error ? error.message : String(error)
+			logger.error('Error during ETM token refresh operation', {
+				error: message,
+			})
+			this.transitionToError(
+				error instanceof Error ? error : new Error(message),
+			)
 			this.emitStateEvent({
 				type: 'refresh-attempt',
 				timestamp: Date.now(),
 				success: false,
-				error: error instanceof Error ? error : new Error(String(error)),
-				metadata: {
-					error: true,
-				},
+				error: error instanceof Error ? error : new Error(message),
+				metadata: { error: true },
 			})
-
-			this.transitionToError(
-				error instanceof Error ? error : new Error(String(error)),
-			)
 			return false
 		}
 	}
 
-	/**
-	 * Minimum time between reconnection attempts in milliseconds (5 seconds)
-	 */
 	private readonly MIN_RECONNECT_INTERVAL_MS = 5000
-
-	/**
-	 * Handle reconnection scenario by delegating to EnhancedTokenManager's reconnect method
-	 *
-	 * Leverages EnhancedTokenManager's reconnect capability and maintains the
-	 * TokenStateMachine state for MCP-specific purposes.
-	 */
 	public async handleReconnection(): Promise<boolean> {
-		// Avoid reconnecting too frequently
 		const now = Date.now()
 		if (now - this.lastReconnectTime < this.MIN_RECONNECT_INTERVAL_MS) {
-			logger.info('Skipping reconnection, too soon after last attempt')
-			return false
+			logger.info('Skipping reconnection, too soon after last attempt.')
+			return false // Indicate that reconnection was skipped
 		}
-
 		this.lastReconnectTime = now
-		logger.info('Handling reconnection')
-
-		// Emit reconnection attempt event
+		logger.info('TokenStateMachine: Handling reconnection.')
 		this.emitStateEvent({
 			type: 'reconnect-attempt',
 			timestamp: Date.now(),
@@ -927,171 +666,59 @@ export class TokenStateMachine implements ITokenManager {
 		})
 
 		try {
-			// Use EnhancedTokenManager to reconnect
-			logger.info('Using EnhancedTokenManager reconnect method')
-			// Custom implementation since reconnect is not available
-			const reconnectSuccessful = await this.customReconnect()
+			logger.info('TokenStateMachine: Calling ETM.reconnect()')
+			// Assuming EnhancedTokenManager has a reconnect method that attempts to restore a valid session
+			await this.tokenClient.triggerReconnection() // Or a more specific reconnect method if available
 
-			if (reconnectSuccessful) {
-				logger.info('EnhancedTokenManager reconnect succeeded')
-
-				// Get token data after successful reconnection
-				const apiTokenData = await this.tokenClient.getTokenData()
-
-				// Validate the token data
-				const validationResult = this.validateTokenData(apiTokenData)
-
-				if (!validationResult.valid) {
-					const errorMsg =
-						validationResult.reason || 'Invalid token data after reconnect'
-					logger.error(errorMsg)
-
-					// Emit failure event
-					this.emitStateEvent({
-						type: 'reconnect-attempt',
-						timestamp: Date.now(),
-						success: false,
-						error: new Error(errorMsg),
-						metadata: {
-							method: 'reconnect',
-							validationFailed: true,
-						},
-					})
-
-					this.transitionToError(new Error(errorMsg))
-					return false
-				}
-
-				// Use the validated token data
-				const validTokenData = validationResult.tokenData!
-
-				// Determine if token is expired
-				const isExpired = this.isTokenExpired(validTokenData)
-
-				// Emit success event
-				this.emitStateEvent({
-					type: 'reconnect-attempt',
-					timestamp: Date.now(),
-					success: true,
-					metadata: {
-						method: 'reconnect',
-						tokenRestored: true,
-						isExpired,
-					},
-				})
-
-				if (isExpired) {
-					// Token is expired after reconnection
-					logger.info('Token is expired after reconnection')
-					this.transitionToExpired(validTokenData)
-
-					// Attempt to refresh the token
-					logger.info('Attempting to refresh expired token after reconnection')
-					return await this.refresh()
-				} else {
-					// Token is valid after reconnection
-					logger.info('Token is valid after reconnection')
-					this.transitionToValid(validTokenData)
-					return true
-				}
-			} else {
-				logger.warn('EnhancedTokenManager reconnect failed')
-
-				// Emit failure event
-				this.emitStateEvent({
-					type: 'reconnect-attempt',
-					timestamp: Date.now(),
-					success: false,
-					metadata: {
-						method: 'reconnect',
-						reconnectFailed: true,
-					},
-				})
-
-				// If EnhancedTokenManager's reconnect failed, try to initialize from scratch
-				logger.info('Attempting to initialize from scratch')
-				return await this.initialize()
-			}
+			// After ETM's reconnect attempt, re-evaluate token state
+			logger.info(
+				'TokenStateMachine: ETM reconnection attempt finished. Re-initializing state.',
+			)
+			return await this.initialize() // Re-initialize to fetch and validate the current token state
 		} catch (error) {
-			logger.error('Error during reconnection handling', { error })
-
-			// Emit failure event
+			const message = error instanceof Error ? error.message : String(error)
+			logger.error('Error during ETM reconnection handling', { error: message })
+			this.transitionToError(
+				error instanceof Error ? error : new Error(message),
+			)
 			this.emitStateEvent({
 				type: 'reconnect-attempt',
 				timestamp: Date.now(),
 				success: false,
-				error: error instanceof Error ? error : new Error(String(error)),
-				metadata: {
-					error: true,
-				},
+				error: error instanceof Error ? error : new Error(message),
+				metadata: { error: true },
 			})
-
-			this.transitionToError(
-				error instanceof Error ? error : new Error(String(error)),
-			)
 			return false
 		}
 	}
 
-	/**
-	 * Get diagnostic information about the current token state
-	 * Leverages EnhancedTokenManager's generateTokenReport
-	 */
 	public async getDiagnostics() {
-		// Start with basic diagnostics from our own state
 		const basicDiagnostics = {
-			state: this.state.status,
-			hasAccessToken:
-				(this.state.status === 'valid' ||
-					this.state.status === 'expired' ||
-					this.state.status === 'refreshing') &&
-				'tokenData' in this.state && // Added check for tokenData
-				!!this.state.tokenData.accessToken,
-			hasRefreshToken:
-				(this.state.status === 'valid' ||
-					this.state.status === 'expired' ||
-					this.state.status === 'refreshing') &&
-				'tokenData' in this.state && // Added check for tokenData
-				!!this.state.tokenData.refreshToken,
-			expiresIn:
-				(this.state.status === 'valid' ||
-					this.state.status === 'expired' ||
-					this.state.status === 'refreshing') &&
-				'tokenData' in this.state && // Added check for tokenData
-				this.state.tokenData.expiresAt
+			stateMachineStatus: this.state.status,
+			isInitializing: (this.state as any).isInitializing || false,
+			hasInternalTokenData: 'tokenData' in this.state && !!this.state.tokenData,
+			internalTokenExpiresInSec:
+				'tokenData' in this.state && this.state.tokenData?.expiresAt
 					? Math.floor((this.state.tokenData.expiresAt - Date.now()) / 1000)
-					: -1,
-			lastReconnection:
-				this.lastReconnectTime > 0
-					? new Date(this.lastReconnectTime).toISOString()
-					: 'never',
+					: undefined,
+			lastReconnectAttemptMs: this.lastReconnectTime,
 		}
-
 		try {
-			// Get the enhanced token manager's diagnostics
-			// Await the promise returned by generateTokenReport
-			const enhancedReport = await this.tokenClient.generateTokenReport()
-
-			// Return combined diagnostics
-			return {
-				...basicDiagnostics,
-				enhancedTokenManager: enhancedReport, // Use the resolved report
-			}
+			const etmDiagnostics = await this.tokenClient.getDiagnostics()
+			return { ...basicDiagnostics, enhancedTokenManager: etmDiagnostics }
 		} catch (error) {
-			logger.warn('Error getting enhanced token diagnostics', { error })
-			// Return basic diagnostics with an error message if enhanced report fails
-			return {
-				...basicDiagnostics,
-				enhancedTokenManagerError:
-					error instanceof Error ? error.message : String(error),
-			}
+			const message = error instanceof Error ? error.message : String(error)
+			logger.warn('Error getting EnhancedTokenManager diagnostics', {
+				error: message,
+			})
+			return { ...basicDiagnostics, enhancedTokenManagerError: message }
 		}
 	}
 
 	/**
 	 * Custom implementation of validateToken for EnhancedTokenManager
 	 */
-	private customValidateToken(tokenData: TokenData | null): {
+	private customValidateToken(tokenData: InternalTokenData | null): {
 		valid: boolean
 		reason?: string
 	} {
@@ -1137,11 +764,13 @@ export class TokenStateMachine implements ITokenManager {
 			if (!apiTokenData) return false
 
 			// Convert to our internal token format
-			const tokenData = convertToCodeFlowTokenData(apiTokenData)
-			if (!tokenData) return false
+			const tokenData = this.validateTokenData(apiTokenData)
+			if (!tokenData.valid) return false
 
 			// If token is expired, try to refresh
-			if (this.isAccessTokenNearingExpiration(tokenData.expiresAt, 0)) {
+			if (
+				this.isAccessTokenNearingExpiration(tokenData.tokenData?.expiresAt, 0)
+			) {
 				try {
 					await this.tokenClient.refreshIfNeeded({ force: true })
 					return true
@@ -1165,7 +794,7 @@ export class TokenStateMachine implements ITokenManager {
 	private addPersistenceEventHandler(
 		handler: (
 			event: TokenPersistenceEvent,
-			data: TokenData | null,
+			data: InternalTokenData | null,
 			metadata?: Record<string, any>,
 		) => void,
 	): void {
@@ -1173,11 +802,11 @@ export class TokenStateMachine implements ITokenManager {
 	}
 
 	/**
-	 * Custom method to trigger persistence events
+	 * Dispatch persistence events to all registered handlers
 	 */
-	private triggerPersistenceEvent(
+	private dispatchPersistenceEvent(
 		event: TokenPersistenceEvent,
-		data: TokenData | null,
+		data: InternalTokenData | null,
 		metadata?: Record<string, any>,
 	): void {
 		for (const handler of this.persistenceEventHandlers) {
@@ -1187,5 +816,11 @@ export class TokenStateMachine implements ITokenManager {
 				logger.error('Error in persistence event handler', { error })
 			}
 		}
+	}
+
+	private isTokenDataExpired(tokenData: InternalTokenData): boolean {
+		const refreshThresholdMs = 300000 // 5 minutes
+		const now = Date.now()
+		return tokenData.expiresAt - now <= refreshThresholdMs
 	}
 }

@@ -9,6 +9,7 @@ export function registerMoversTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
+	logger.info('[MoversTools] Attempting to register Movers tools...')
 	createTool(client, server, {
 		name: 'getMovers',
 		schema: z.object(
@@ -45,4 +46,5 @@ export function registerMoversTools(
 			}
 		},
 	})
+	logger.info('[MoversTools] Movers tools registration process completed.')
 }

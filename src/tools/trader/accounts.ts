@@ -8,6 +8,7 @@ export function registerAccountTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
+	logger.info('[AccountTools] Attempting to register account tools...')
 	createTool(client, server, {
 		name: 'getAccounts',
 		schema: client.schemas.GetAccountsRequestQueryParams,
@@ -59,4 +60,6 @@ export function registerAccountTools(
 			}
 		},
 	})
+
+	logger.info('[AccountTools] Account tools registration process completed.')
 }

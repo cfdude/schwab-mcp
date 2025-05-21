@@ -23,7 +23,7 @@ function toHex(buffer: ArrayBuffer): string {
 /**
  * Converts a hex string to an ArrayBuffer
  * Uses Buffer in Node.js-compatible environments (enabled with nodejs_compat)
- * 
+ *
  * @param hexString - A hexadecimal string
  * @returns ArrayBuffer representation of the hex string
  */
@@ -33,7 +33,7 @@ function fromHex(hexString: string): ArrayBuffer {
 		logger.warn('Invalid hex string format detected')
 		throw new Error('Invalid hex string format')
 	}
-	
+
 	// Using Buffer is more standard when available in the Workers environment
 	return Buffer.from(hexString, 'hex').buffer
 }
@@ -321,7 +321,12 @@ export async function parseRedirectApproval(
 		}
 
 		encodedState = stateParam
-		state = decodeAndVerifyState(encodedState)
+		const decodedState = decodeAndVerifyState(encodedState)
+		if (!decodedState) {
+			const errorInfo = formatAuthError(AuthError.INVALID_STATE)
+			throw new Error(errorInfo.message)
+		}
+		state = decodedState
 		clientId = extractClientIdFromState(state)
 	} catch (e) {
 		logger.error('Error processing form submission:', e)
@@ -353,4 +358,3 @@ export async function parseRedirectApproval(
 		headers: { 'Set-Cookie': cookieHeaderValue },
 	}
 }
-

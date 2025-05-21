@@ -9,6 +9,7 @@ export function registerQuotesTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
+	logger.info('[QuotesTools] Attempting to register Quotes tools...');
 	createTool(client, server, {
 		name: 'getQuotes',
 		schema: client.schemas.GetQuotesRequestQueryParamsSchema,
@@ -72,4 +73,5 @@ export function registerQuotesTools(
 			}
 		},
 	})
+	logger.info('[QuotesTools] Quotes tools registration process completed.');
 }
