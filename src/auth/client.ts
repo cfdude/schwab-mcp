@@ -26,16 +26,6 @@ export interface CodeFlowTokenData extends TokenData {
 }
 
 /**
- * Event emitted during token lifecycle events
- */
-export interface TokenLifecycleEvent {
-	type: 'save' | 'load' | 'refresh' | 'expire' | 'error'
-	tokenData?: TokenData | null
-	error?: Error | null
-	timestamp: number
-}
-
-/**
  * Creates a Schwab Auth client with enhanced features
  *
  * @param redirectUri OAuth callback URI
