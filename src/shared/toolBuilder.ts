@@ -142,12 +142,6 @@ export function toolSuccess<T>({
 	return { success: true, data, message }
 }
 
-export function mergeShapes<T extends z.ZodRawShape[]>(
-	...shapes: T
-): z.ZodRawShape {
-	return shapes.reduce((acc, shape) => ({ ...acc, ...shape }), {})
-}
-
 export function createTool<S extends z.ZodSchema<any, any>>(
 	client: SchwabApiClient,
 	server: McpServer,

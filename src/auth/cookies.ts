@@ -1,3 +1,4 @@
+import { safeBase64Decode, safeBase64Encode } from '@sudowealth/schwab-api'
 import { logger } from '../shared/logger'
 import { AuthError, formatAuthError } from './errorMessages'
 import {
@@ -154,8 +155,7 @@ async function verifyAndDecodeCookie<T>(
 			logger.warn('Invalid base64 payload format: not a string')
 			return undefined
 		}
-		const binaryString = atob(base64Payload)
-		payloadString = binaryString
+		payloadString = safeBase64Decode(base64Payload)
 	} catch (e) {
 		logger.warn('Invalid base64 payload in cookie:', e)
 		return undefined
@@ -197,7 +197,7 @@ async function createSignedCookie(
 	const stringifiedPayload = JSON.stringify(payload)
 	const key = await importKey(secret)
 	const signature = await signData(key, stringifiedPayload)
-	return `${signature}.${btoa(stringifiedPayload)}`
+	return `${signature}.${safeBase64Encode(stringifiedPayload, false)}`
 }
 
 /**

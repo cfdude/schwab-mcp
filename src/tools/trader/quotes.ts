@@ -1,14 +1,11 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
 	GetQuotesRequestQueryParamsSchema,
-	GetQuoteBySymbolIdRequestPathParamsSchema,
+	GetQuoteBySymbolIdRequestParamsSchema,
 	type SchwabApiClient,
-	GetQuoteBySymbolIdRequestQueryParamsSchema,
 } from '@sudowealth/schwab-api'
-import { z } from 'zod'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
-import { mergeShapes } from '../../shared/utils'
 
 export function registerQuotesTools(
 	client: SchwabApiClient,
@@ -43,12 +40,7 @@ export function registerQuotesTools(
 
 	createTool(client, server, {
 		name: 'getQuoteBySymbolId',
-		schema: z.object(
-			mergeShapes(
-				GetQuoteBySymbolIdRequestPathParamsSchema.shape,
-				GetQuoteBySymbolIdRequestQueryParamsSchema.shape,
-			),
-		),
+		schema: GetQuoteBySymbolIdRequestParamsSchema,
 		handler: async ({ symbol_id, fields }, client) => {
 			try {
 				logger.info('[getQuoteBySymbolId] Fetching quote', {

@@ -1,13 +1,10 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
-	GetMoversRequestPathParamsSchema,
-	GetMoversRequestQueryParamsSchema,
+	GetMoversRequestParamsSchema,
 	type SchwabApiClient,
 } from '@sudowealth/schwab-api'
-import { z } from 'zod'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
-import { mergeShapes } from '../../shared/utils'
 
 export function registerMoversTools(
 	client: SchwabApiClient,
@@ -16,12 +13,7 @@ export function registerMoversTools(
 	logger.info('[MoversTools] Attempting to register Movers tools...')
 	createTool(client, server, {
 		name: 'getMovers',
-		schema: z.object(
-			mergeShapes(
-				GetMoversRequestQueryParamsSchema.shape,
-				GetMoversRequestPathParamsSchema.shape,
-			),
-		),
+		schema: GetMoversRequestParamsSchema,
 		handler: async ({ symbol_id, sort, frequency }, client) => {
 			try {
 				logger.info('[getMovers] Fetching movers', {

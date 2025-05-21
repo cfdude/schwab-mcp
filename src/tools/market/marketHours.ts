@@ -1,14 +1,11 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
+	GetMarketHoursByMarketIdRequestParamsSchema,
 	GetMarketHoursRequestQueryParamsSchema,
-	GetMarketHoursByMarketIdRequestQueryParamsSchema,
-	GetMarketHoursByMarketIdRequestPathParamsSchema,
 	type SchwabApiClient,
 } from '@sudowealth/schwab-api'
-import { z } from 'zod'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
-import { mergeShapes } from '../../shared/utils'
 
 export function registerMarketHoursTools(
 	client: SchwabApiClient,
@@ -48,12 +45,7 @@ export function registerMarketHoursTools(
 
 	createTool(client, server, {
 		name: 'getMarketHoursByMarketId',
-		schema: z.object(
-			mergeShapes(
-				GetMarketHoursByMarketIdRequestQueryParamsSchema.shape,
-				GetMarketHoursByMarketIdRequestPathParamsSchema.shape,
-			),
-		),
+		schema: GetMarketHoursByMarketIdRequestParamsSchema,
 		handler: async (params, client) => {
 			try {
 				const { market_id, date } = params

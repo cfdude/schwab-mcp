@@ -1,4 +1,5 @@
 import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
+import { safeBase64Decode } from '@sudowealth/schwab-api'
 import { logger } from '../shared/logger'
 import { AuthError, formatAuthError } from './errorMessages'
 
@@ -44,17 +45,9 @@ export function decodeAndVerifyState(stateParam: string): AuthRequest | null {
 		// First URL-decode the state
 		const urlDecodedState = decodeURIComponent(stateParam)
 
-		// Convert from base64url to base64
-		let base64State = urlDecodedState.replace(/-/g, '+').replace(/_/g, '/')
-
-		// Add padding if needed
-		while (base64State.length % 4 !== 0) {
-			base64State += '='
-		}
-
-		// Now attempt to decode
+		// Use the safer base64 decoder which handles URL-safe characters and padding
 		try {
-			const decodedState = atob(base64State)
+			const decodedState = safeBase64Decode(urlDecodedState)
 			// Parse JSON
 			return JSON.parse(decodedState) as AuthRequest
 		} catch (error) {
