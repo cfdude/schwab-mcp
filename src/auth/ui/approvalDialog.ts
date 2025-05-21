@@ -178,7 +178,7 @@ body {
 /**
  * Configuration for the approval dialog
  */
-export interface ApprovalDialogOptions {
+interface ApprovalDialogOptions {
 	/**
 	 * Client information to display in the approval dialog
 	 */

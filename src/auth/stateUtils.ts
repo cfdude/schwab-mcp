@@ -84,14 +84,3 @@ export function extractClientIdFromState(state: StateData): string {
 
 	return clientId
 }
-
-/**
- * Encodes a state object to base64.
- *
- * @param state - The state object to encode.
- * @returns The base64 encoded state string.
- */
-export function encodeState(state: StateData): string {
-	const jsonString = JSON.stringify(state)
-	return btoa(jsonString)
-}

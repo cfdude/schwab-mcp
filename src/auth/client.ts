@@ -36,36 +36,6 @@ export interface TokenLifecycleEvent {
 }
 
 /**
- * Result of token validation operations
- */
-export interface TokenValidationResult {
-	valid: boolean
-	canRefresh: boolean
-	tokenData?: TokenData | null
-	reason?: string
-}
-
-/**
- * Result of token refresh operations
- */
-export interface TokenRefreshResult {
-	success: boolean
-	tokenData?: TokenData | null
-	error?: Error | null
-}
-
-/**
- * Result of reconnection operations
- */
-export interface ReconnectionResult {
-	success: boolean
-	tokenRestored: boolean
-	refreshPerformed: boolean
-	error?: Error | null
-	tokenData?: CodeFlowTokenData
-}
-
-/**
  * Creates a Schwab Auth client with enhanced features
  *
  * @param redirectUri OAuth callback URI

@@ -42,7 +42,7 @@ export enum AuthError {
 }
 
 // HTTP status codes associated with errors
-export enum StatusCode {
+enum StatusCode {
 	BAD_REQUEST = 400,
 	UNAUTHORIZED = 401,
 	FORBIDDEN = 403,
@@ -53,7 +53,7 @@ export enum StatusCode {
 /**
  * Maps error types to appropriate HTTP status codes
  */
-export const errorStatusMap: Record<AuthError, StatusCode> = {
+const errorStatusMap: Record<AuthError, StatusCode> = {
 	[AuthError.MISSING_CLIENT_ID]: StatusCode.BAD_REQUEST,
 	[AuthError.MISSING_STATE]: StatusCode.BAD_REQUEST,
 	[AuthError.MISSING_PARAMETERS]: StatusCode.BAD_REQUEST,
@@ -87,7 +87,7 @@ export const errorStatusMap: Record<AuthError, StatusCode> = {
  * @param status Optional status code override
  * @returns A standardized error response object
  */
-export interface ErrorResponse {
+interface ErrorResponse {
 	message: string
 	status: StatusCode
 	details?: any

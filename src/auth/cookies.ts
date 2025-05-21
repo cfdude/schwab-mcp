@@ -282,7 +282,7 @@ export async function clientIdAlreadyApproved(
 /**
  * Result of parsing the approval form submission.
  */
-export interface ParsedApprovalResult {
+interface ParsedApprovalResult {
 	/** The original state object passed through the form. */
 	state: StateData
 	/** Headers to set on the redirect response, including the Set-Cookie header. */

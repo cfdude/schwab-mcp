@@ -5,8 +5,6 @@ export { SchwabHandler } from './handler'
 export * from './tokenStateMachine'
 export * from './tokenInterface'
 export * from './stateUtils'
-export { renderApprovalDialog } from './ui'
-
 import { logger } from '../shared/logger'
 import { type ITokenManager } from './tokenInterface'
 
@@ -31,29 +29,4 @@ export function initializeTokenManager(manager: ITokenManager): void {
 	}
 
 	tokenManagerInstance = manager
-}
-
-/**
- * Get the token manager singleton
- *
- * @returns The token manager instance or null if not initialized
- */
-export function getTokenManager(): ITokenManager | null {
-	return tokenManagerInstance
-}
-
-/**
- * Central access point for token validation
- *
- * This provides a consistent way to validate tokens across the application.
- *
- * @returns Promise that resolves to true if token is valid, false otherwise
- */
-export async function ensureValidToken(): Promise<boolean> {
-	if (!tokenManagerInstance) {
-		logger.error('Token manager not initialized')
-		return false
-	}
-
-	return tokenManagerInstance.ensureValidToken()
 }

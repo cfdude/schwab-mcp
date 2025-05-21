@@ -2,12 +2,6 @@ import { logger } from '../shared/logger'
 import { type Env, type ValidatedEnv } from '../types/env'
 
 /**
- * Validated environment configuration
- * Contains only validated environment variables
- */
-export type ValidatedEnvConfig = ValidatedEnv
-
-/**
  * AppConfig - Unified environment configuration provider
  *
  * This class centralizes environment validation and provides type-safe

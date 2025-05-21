@@ -2,7 +2,6 @@ import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { type SchwabApiClient } from '@sudowealth/schwab-api'
 import { z } from 'zod'
 import { type Result } from '../types/result'
-import { type FormattedSuccessPayload } from './formatters'
 import { logger } from './logger'
 
 // 1. Define and export the toolRegistry
@@ -13,15 +12,15 @@ export const toolRegistry = new Map<
 		handler: (
 			input: any,
 			client: SchwabApiClient,
-		) => Promise<ToolResponse | Result<FormattedSuccessPayload<any>> | any>
+		) => Promise<ToolResponse | any>
 	}
 >()
 
-export type ToolResponse<T = any> =
+type ToolResponse<T = any> =
 	| { success: true; data: T; message?: string }
 	| { success: false; error: Error; details?: Record<string, any> }
 
-export type McpContentArray = {
+type McpContentArray = {
 	content: Array<{ type: string; text: string }>
 	isError?: boolean
 }
@@ -162,7 +161,7 @@ export function createTool<S extends z.ZodSchema<any, any>>(
 		handler: (
 			input: z.infer<S>,
 			client: SchwabApiClient,
-		) => Promise<ToolResponse | Result<FormattedSuccessPayload<any>> | any>
+		) => Promise<ToolResponse | any>
 	},
 ) {
 	// Populate the internal toolRegistry

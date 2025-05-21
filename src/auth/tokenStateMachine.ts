@@ -17,7 +17,7 @@ type TokenState =
 	| { status: 'refreshing'; tokenData: InternalTokenData }
 	| { status: 'error'; error: Error }
 
-export type TokenStateEvent = {
+type TokenStateEvent = {
 	type: 'state-change' | 'refresh-attempt' | 'reconnect-attempt'
 	previousState?: string
 	newState?: string
@@ -27,7 +27,7 @@ export type TokenStateEvent = {
 	metadata?: Record<string, any>
 }
 
-export type TokenStateEventListener = (event: TokenStateEvent) => void
+type TokenStateEventListener = (event: TokenStateEvent) => void
 
 interface ValidateTokenResult {
 	valid: boolean
