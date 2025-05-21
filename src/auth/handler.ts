@@ -185,9 +185,13 @@ app.get('/callback', async (c) => {
 		const auth = initializeSchwabAuthClient(redirectUri, loadToken, saveToken)
 
 		// Exchange the code for tokens with enhanced error handling
-		logger.info('Exchanging authorization code for tokens')
+		logger.info(
+			'Exchanging authorization code for tokens with state parameter for PKCE',
+		)
 		let tokenSet
 		try {
+			// Pass the stateParam directly to EnhancedTokenManager.exchangeCode
+			// EnhancedTokenManager will handle extracting the code_verifier from it
 			tokenSet = await auth.exchangeCode(code, stateParam)
 		} catch (exchangeError) {
 			logger.error('Token exchange failed', {
