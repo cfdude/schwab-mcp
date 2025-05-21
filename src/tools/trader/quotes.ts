@@ -1,5 +1,10 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { type SchwabApiClient } from '@sudowealth/schwab-api'
+import {
+	GetQuotesRequestQueryParamsSchema,
+	GetQuoteBySymbolIdRequestPathParamsSchema,
+	type SchwabApiClient,
+	GetQuoteBySymbolIdRequestQueryParamsSchema,
+} from '@sudowealth/schwab-api'
 import { z } from 'zod'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
@@ -9,10 +14,10 @@ export function registerQuotesTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
-	logger.info('[QuotesTools] Attempting to register Quotes tools...');
+	logger.info('[QuotesTools] Attempting to register Quotes tools...')
 	createTool(client, server, {
 		name: 'getQuotes',
-		schema: client.schemas.GetQuotesRequestQueryParamsSchema,
+		schema: GetQuotesRequestQueryParamsSchema,
 		handler: async ({ symbols, fields, indicative }, client) => {
 			try {
 				logger.info('[getQuotes] Fetching quotes', { symbols, fields })
@@ -40,8 +45,8 @@ export function registerQuotesTools(
 		name: 'getQuoteBySymbolId',
 		schema: z.object(
 			mergeShapes(
-				client.schemas.GetQuoteBySymbolIdRequestPathParamsSchema.shape,
-				client.schemas.GetQuoteBySymbolIdRequestQueryParamsSchema.shape,
+				GetQuoteBySymbolIdRequestPathParamsSchema.shape,
+				GetQuoteBySymbolIdRequestQueryParamsSchema.shape,
 			),
 		),
 		handler: async ({ symbol_id, fields }, client) => {
@@ -73,5 +78,5 @@ export function registerQuotesTools(
 			}
 		},
 	})
-	logger.info('[QuotesTools] Quotes tools registration process completed.');
+	logger.info('[QuotesTools] Quotes tools registration process completed.')
 }

@@ -1,5 +1,8 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { type SchwabApiClient } from '@sudowealth/schwab-api'
+import {
+	GetPriceHistoryRequestQueryParamsSchema,
+	type SchwabApiClient,
+} from '@sudowealth/schwab-api'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
 
@@ -12,7 +15,7 @@ export function registerPriceHistoryTools(
 	)
 	createTool(client, server, {
 		name: 'getPriceHistory',
-		schema: client.schemas.GetPriceHistoryRequestQueryParamsSchema,
+		schema: GetPriceHistoryRequestQueryParamsSchema,
 		handler: async (params, client) => {
 			try {
 				logger.info('[getPriceHistory] Fetching price history', {

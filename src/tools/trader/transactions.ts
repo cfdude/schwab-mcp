@@ -1,5 +1,8 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { type SchwabApiClient } from '@sudowealth/schwab-api'
+import {
+	GetTransactionsRequestQueryParams,
+	type SchwabApiClient,
+} from '@sudowealth/schwab-api'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
 
@@ -7,10 +10,10 @@ export function registerTransactionTools(
 	client: SchwabApiClient,
 	server: McpServer,
 ) {
-	logger.info('[TransactionTools] Attempting to register Transaction tools...');
+	logger.info('[TransactionTools] Attempting to register Transaction tools...')
 	createTool(client, server, {
 		name: 'getTransactions',
-		schema: client.schemas.GetTransactionsRequestQueryParams,
+		schema: GetTransactionsRequestQueryParams,
 		handler: async ({ startDate, endDate, types, symbol }, client) => {
 			try {
 				logger.info('[getTransactions] Fetching accounts')
@@ -65,5 +68,7 @@ export function registerTransactionTools(
 			}
 		},
 	})
-	logger.info('[TransactionTools] Transaction tools registration process completed.');
+	logger.info(
+		'[TransactionTools] Transaction tools registration process completed.',
+	)
 }

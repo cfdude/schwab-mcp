@@ -1,13 +1,16 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { type SchwabApiClient } from '@sudowealth/schwab-api'
+import {
+	GetOrdersRequestQueryParams,
+	type SchwabApiClient,
+} from '@sudowealth/schwab-api'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
 
 export function registerOrderTools(client: SchwabApiClient, server: McpServer) {
-	logger.info('[OrderTools] Attempting to register Order tools...');
+	logger.info('[OrderTools] Attempting to register Order tools...')
 	createTool(client, server, {
 		name: 'getOrders',
-		schema: client.schemas.GetOrdersRequestQueryParams,
+		schema: GetOrdersRequestQueryParams,
 		handler: async (queryParams, client) => {
 			try {
 				logger.info('[getOrders] Fetching orders', {
@@ -31,5 +34,5 @@ export function registerOrderTools(client: SchwabApiClient, server: McpServer) {
 			}
 		},
 	})
-	logger.info('[OrderTools] Order tools registration process completed.');
+	logger.info('[OrderTools] Order tools registration process completed.')
 }
