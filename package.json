@@ -18,24 +18,24 @@
     "validate": "npm run typecheck && npm run lint"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250509.0",
-    "@epic-web/config": "^1.20.1",
-    "@types/node": "^20.10.4",
-    "eslint": "^9.26.0",
-    "knip": "^5.55.1",
+    "@cloudflare/workers-types": "^4.20250521.0",
+    "@epic-web/config": "^1.21.0",
+    "@types/node": "^22.15.21",
+    "eslint": "^9.27.0",
+    "knip": "^5.57.1",
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
-    "wrangler": "^4.14.4"
+    "wrangler": "^4.16.0"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.0.5",
     "@epic-web/invariant": "^1.0.0",
-    "@modelcontextprotocol/sdk": "^1.11.1",
+    "@modelcontextprotocol/sdk": "^1.11.5",
     "@sudowealth/schwab-api": "^1.2.0-beta.89",
-    "agents": "^0.0.80",
-    "hono": "^4.7.9",
-    "workers-mcp": "0.1.0-3",
-    "zod": "^3.24.4"
+    "agents": "^0.0.91",
+    "hono": "^4.7.10",
+    "workers-mcp": "^0.1.0-3",
+    "zod": "^3.25.17"
   },
   "prettier": "@epic-web/config/prettier",
   "author": "Daniel Yeoman",
