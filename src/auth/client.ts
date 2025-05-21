@@ -96,7 +96,7 @@ export function initializeSchwabAuthClient(
 				const mcpToken = await load()
 				if (!mcpToken) return null
 				return {
-					// Map to schwab-api's TokenSet
+					// Map to @sudowealth/schwab-api's TokenSet
 					accessToken: mcpToken.accessToken,
 					refreshToken: mcpToken.refreshToken,
 					expiresAt: mcpToken.expiresAt,
@@ -107,7 +107,7 @@ export function initializeSchwabAuthClient(
 	const mappedSave = save
 		? async (apiTokenSet: TokenData) => {
 				await save({
-					// Map from schwab-api's TokenData/TokenSet
+					// Map from @sudowealth/schwab-api's TokenData/TokenSet
 					accessToken: apiTokenSet.accessToken,
 					refreshToken: apiTokenSet.refreshToken || '', // ensure not undefined
 					expiresAt: apiTokenSet.expiresAt || 0, // ensure not undefined
@@ -167,9 +167,11 @@ export async function redirectToSchwab(
 		const auth = initializeSchwabAuthClient(redirectUri)
 
 		// Get the authorization URL with state parameter
-		// Pass state to EnhancedTokenManager's getAuthorizationUrl
-		// The EnhancedTokenManager will handle embedding our state in the authUrl
-		// along with any PKCE code verifier it generates internally
+		// Pass application state to EnhancedTokenManager's getAuthorizationUrl
+		// The EnhancedTokenManager will:
+		// 1. Generate PKCE code_verifier and code_challenge
+		// 2. Embed our application state along with its code_verifier in the state parameter
+		// 3. Include code_challenge in the authorization URL as required by PKCE
 		const { authUrl } = await auth.getAuthorizationUrl({
 			state: btoa(JSON.stringify(oauthReqInfo)),
 		})

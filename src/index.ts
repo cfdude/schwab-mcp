@@ -170,17 +170,6 @@ export class MyMCP extends DurableMCP<Props, Env> {
 					auth: this.tokenManager,
 				})
 			}
-			if (
-				this.client &&
-				typeof this.client === 'object' &&
-				'axiosInstance' in this.client // This check is likely incorrect for the new schwab-api which uses fetch
-			) {
-				// The axiosInstance interceptor logic might need to be adapted if createApiClient now uses a fetch-based pipeline
-				// For now, assuming it's either still relevant or will be handled by schwab-api's internal logging/middleware
-				logger.warn(
-					'axiosInstance found on client, this might be unexpected with the new schwab-api fetch pipeline. Interceptors may not work as intended.',
-				)
-			}
 			if (!this.centralTokenManager) {
 				logger.warn('Token manager not found during initialization')
 			}
