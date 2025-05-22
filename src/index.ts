@@ -8,11 +8,9 @@ import {
 	type TokenSet,
 } from '@sudowealth/schwab-api'
 import { DurableMCP } from 'workers-mcp'
-import { z } from 'zod'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
 import { getEnvironment, initializeEnvironment } from './config'
 import { logger } from './shared/logger'
-import { toolRegistry, toolError, formatResponse } from './shared/toolBuilder'
 import {
 	registerAccountTools,
 	registerInstrumentTools,
@@ -23,6 +21,7 @@ import {
 	registerPriceHistoryTools,
 	registerQuotesTools,
 	registerTransactionTools,
+	registerUserPreferenceTools,
 } from './tools'
 import { type ValidatedEnv } from './types/env'
 
@@ -171,6 +170,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 		registerPriceHistoryTools(client, this.server)
 		registerQuotesTools(client, this.server)
 		registerTransactionTools(client, this.server)
+		registerUserPreferenceTools(client, this.server)
 		logger.info('[MyMCP] Finished specific tool registration.')
 	}
 
