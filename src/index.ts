@@ -5,7 +5,7 @@ import {
 	type SchwabApiClient,
 	type EnhancedTokenManager,
 	type SchwabApiLogger,
-	type TokenSet,
+	type TokenData,
 } from '@sudowealth/schwab-api'
 import { DurableMCP } from 'workers-mcp'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
@@ -26,7 +26,7 @@ import {
 import { type ValidatedEnv } from './types/env'
 
 // Align MyMCPProps with schwab-api's TokenSet for consistency
-type MyMCPProps = Partial<TokenSet>
+type MyMCPProps = Partial<TokenData>
 
 export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	private tokenManager!: EnhancedTokenManager
@@ -46,7 +46,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			logger.info('[MyMCP.init] STEP 1: Env initialized.')
 
 			// Use schwab-api's TokenSet for the function signatures
-			const saveTokenForETM = async (tokenSet: TokenSet) => {
+			const saveTokenForETM = async (tokenSet: TokenData) => {
 				if (tokenSet.accessToken) this.props.accessToken = tokenSet.accessToken
 				if (tokenSet.refreshToken)
 					this.props.refreshToken = tokenSet.refreshToken
@@ -61,13 +61,13 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				})
 			}
 
-			const loadTokenForETM = async (): Promise<TokenSet | null> => {
+			const loadTokenForETM = async (): Promise<TokenData | null> => {
 				if (
 					this.props.accessToken &&
 					this.props.refreshToken &&
 					this.props.expiresAt
 				) {
-					const tokenData: TokenSet = {
+					const tokenData: TokenData = {
 						accessToken: this.props.accessToken,
 						refreshToken: this.props.refreshToken,
 						expiresAt: this.props.expiresAt,

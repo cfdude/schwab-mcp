@@ -31,7 +31,7 @@
     "@cloudflare/workers-oauth-provider": "^0.0.5",
     "@epic-web/invariant": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.11.5",
-    "@sudowealth/schwab-api": "^1.2.0-beta.96",
+    "@sudowealth/schwab-api": "^2.1.0-beta.2",
     "agents": "^0.0.91",
     "hono": "^4.7.10",
     "workers-mcp": "^0.1.0-3",

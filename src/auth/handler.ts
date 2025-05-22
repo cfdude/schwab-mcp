@@ -7,16 +7,13 @@ import {
 	SchwabAuthError,
 	SchwabApiError,
 	AuthErrorCode as SchwabSDKAuthErrorCode,
+	type TokenData,
 } from '@sudowealth/schwab-api'
 import { Hono } from 'hono'
 import { getEnvironment } from '../config'
 import { logger } from '../shared/logger'
 import { type Env } from '../types/env'
-import {
-	initializeSchwabAuthClient,
-	redirectToSchwab,
-	type CodeFlowTokenData,
-} from './client'
+import { initializeSchwabAuthClient, redirectToSchwab } from './client'
 import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
 import { AuthError, formatAuthError } from './errorMessages'
 import { ensureEnvInitialized } from './middlewares'
@@ -172,18 +169,18 @@ app.get('/callback', async (c) => {
 		const redirectUri = getEnvironment().SCHWAB_REDIRECT_URI
 		const userIdForKV = clientIdFromState // Use the validated clientId for KV key consistency
 
-		const saveToken = async (tokenData: CodeFlowTokenData) => {
+		const saveToken = async (tokenData: TokenData) => {
 			await getEnvironment().OAUTH_KV?.put(
 				`token:${userIdForKV}`,
 				JSON.stringify(tokenData),
 			)
 		}
 
-		const loadToken = async (): Promise<CodeFlowTokenData | null> => {
+		const loadToken = async (): Promise<TokenData | null> => {
 			const tokenStr = await getEnvironment().OAUTH_KV?.get(
 				`token:${userIdForKV}`,
 			)
-			return tokenStr ? (JSON.parse(tokenStr) as CodeFlowTokenData) : null
+			return tokenStr ? (JSON.parse(tokenStr) as TokenData) : null
 		}
 
 		// Use the validated config for auth client to ensure consistency

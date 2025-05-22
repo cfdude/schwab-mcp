@@ -17,15 +17,6 @@ import { type Env } from '../types/env'
 import { AuthError, formatAuthError } from './errorMessages'
 
 /**
- * Token data structure required by Schwab enhanced authentication strategy
- */
-export interface CodeFlowTokenData extends TokenData {
-	accessToken: string
-	refreshToken: string
-	expiresAt: number
-}
-
-/**
  * Creates a Schwab Auth client with enhanced features
  *
  * @param redirectUri OAuth callback URI
@@ -35,8 +26,8 @@ export interface CodeFlowTokenData extends TokenData {
  */
 export function initializeSchwabAuthClient(
 	redirectUri: string,
-	load?: () => Promise<CodeFlowTokenData | null>,
-	save?: (tokenData: CodeFlowTokenData) => Promise<void>,
+	load?: () => Promise<TokenData | null>,
+	save?: (tokenData: TokenData) => Promise<void>,
 ): EnhancedTokenManager {
 	// Get credentials directly from the centralized environment
 	const env = getEnvironment()
