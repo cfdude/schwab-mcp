@@ -4,6 +4,10 @@ import {
 	type SchwabApiClient,
 } from '@sudowealth/schwab-api'
 import { z } from 'zod'
+import {
+	buildAccountDisplayMap,
+	scrubAccountIdentifiers,
+} from '../../shared/accountScrubber'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
 
@@ -20,6 +24,7 @@ export function registerAccountTools(
 				logger.info('Fetching accounts', {
 					showPositions: queryParams?.fields,
 				})
+				const displayMap = await buildAccountDisplayMap(client)
 				const accounts = await client.trader.accounts.getAccounts({
 					queryParams: { fields: queryParams?.fields },
 				})
@@ -27,9 +32,10 @@ export function registerAccountTools(
 				const accountSummaries = accounts.map((acc: any) => ({
 					...acc.securitiesAccount,
 				}))
+				const scrubbed = scrubAccountIdentifiers(accountSummaries, displayMap)
 
 				return toolSuccess({
-					data: accountSummaries,
+					data: scrubbed,
 					message:
 						accounts.length > 0
 							? 'Successfully fetched Schwab accounts'
@@ -48,10 +54,15 @@ export function registerAccountTools(
 		handler: async (_params, client) => {
 			try {
 				logger.info('Fetching account numbers')
+				const displayMap = await buildAccountDisplayMap(client)
 				const accounts = await client.trader.accounts.getAccountNumbers()
 
+				const displayNames = accounts.map(
+					(acc) => displayMap[acc.accountNumber],
+				)
+
 				return toolSuccess({
-					data: accounts,
+					data: displayNames,
 					message:
 						accounts.length > 0
 							? 'Successfully fetched Schwab accounts'

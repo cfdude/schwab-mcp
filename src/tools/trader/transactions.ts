@@ -3,6 +3,10 @@ import {
 	GetTransactionsRequestQueryParams,
 	type SchwabApiClient,
 } from '@sudowealth/schwab-api'
+import {
+	buildAccountDisplayMap,
+	scrubAccountIdentifiers,
+} from '../../shared/accountScrubber'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
 
@@ -18,7 +22,8 @@ export function registerTransactionTools(
 			try {
 				logger.info('[getTransactions] Fetching accounts')
 
-				// First get all account numbers
+				// Build account display map and get account numbers
+				const displayMap = await buildAccountDisplayMap(client)
 				const accounts = await client.trader.accounts.getAccountNumbers()
 				if (accounts.length === 0) {
 					return toolSuccess({
@@ -55,8 +60,10 @@ export function registerTransactionTools(
 					transactions.push(...accountTransactions)
 				}
 
+				const scrubbed = scrubAccountIdentifiers(transactions, displayMap)
+
 				return toolSuccess({
-					data: transactions,
+					data: scrubbed,
 					message:
 						transactions.length === 0
 							? 'No Schwab transactions found.'

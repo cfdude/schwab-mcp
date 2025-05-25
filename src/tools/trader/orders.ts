@@ -3,6 +3,10 @@ import {
 	GetOrdersRequestQueryParams,
 	type SchwabApiClient,
 } from '@sudowealth/schwab-api'
+import {
+	buildAccountDisplayMap,
+	scrubAccountIdentifiers,
+} from '../../shared/accountScrubber'
 import { logger } from '../../shared/logger'
 import { createTool, toolSuccess, toolError } from '../../shared/toolBuilder'
 
@@ -19,10 +23,13 @@ export function registerOrderTools(client: SchwabApiClient, server: McpServer) {
 						!!queryParams.fromEnteredTime || !!queryParams.toEnteredTime,
 				})
 
+				const displayMap = await buildAccountDisplayMap(client)
 				const orders = await client.trader.orders.getOrders({ queryParams })
 
+				const scrubbed = scrubAccountIdentifiers(orders, displayMap)
+
 				return toolSuccess({
-					data: orders,
+					data: scrubbed,
 					message:
 						orders.length === 0
 							? 'No Schwab orders found.'
