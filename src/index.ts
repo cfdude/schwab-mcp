@@ -112,13 +112,22 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			}
 			logger.info('[MyMCP.init] STEP 4: MCP Logger adapted.')
 
-			// 2. Create SchwabApiClient (now synchronous)
+			// 2. Proactively initialize ETM to load tokens BEFORE creating client
+			logger.info(
+				'[MyMCP.init] STEP 5A: Proactively calling this.tokenManager.initialize() (async)...',
+			)
+			const etmInitSuccess = await this.tokenManager.initialize()
+			logger.info(
+				`[MyMCP.init] STEP 5B: Proactive ETM initialization complete. Success: ${etmInitSuccess}`,
+			)
+
+			// 3. Create SchwabApiClient AFTER tokens are loaded
 			if (
 				!this.client ||
 				(this.client._context?.config as any)?.auth !== this.tokenManager
 			) {
 				logger.info(
-					'[MyMCP.init] STEP 5A: Calling createApiClient (now sync)...',
+					'[MyMCP.init] STEP 6A: Calling createApiClient (now sync)...',
 				)
 				// Client creation is now synchronous with the ETM
 				this.client = createApiClient({
@@ -130,24 +139,15 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 					},
 					auth: this.tokenManager, // Pass the ETM instance
 				})
-				logger.info('[MyMCP.init] STEP 5B: createApiClient completed (sync).')
+				logger.info('[MyMCP.init] STEP 6B: createApiClient completed (sync).')
 			} else {
-				logger.info('[MyMCP.init] STEP 5: Re-using existing SchwabApiClient.')
+				logger.info('[MyMCP.init] STEP 6: Re-using existing SchwabApiClient.')
 			}
 
-			// 3. Register tools (this.server.tool calls are synchronous)
-			logger.info('[MyMCP.init] STEP 6A: Calling registerTools...')
+			// 4. Register tools (this.server.tool calls are synchronous)
+			logger.info('[MyMCP.init] STEP 7A: Calling registerTools...')
 			await this.registerTools(this.client)
-			logger.info('[MyMCP.init] STEP 6B: registerTools completed.')
-
-			// 4. Proactively initialize ETM (async, but after tool registration)
-			logger.info(
-				'[MyMCP.init] STEP 7A: Proactively calling this.tokenManager.initialize() (async)...',
-			)
-			const etmInitSuccess = await this.tokenManager.initialize()
-			logger.info(
-				`[MyMCP.init] STEP 7B: Proactive ETM initialization complete. Success: ${etmInitSuccess}`,
-			)
+			logger.info('[MyMCP.init] STEP 7B: registerTools completed.')
 
 			logger.info('[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY')
 		} catch (error: any) {

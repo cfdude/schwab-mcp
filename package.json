@@ -1,5 +1,5 @@
 {
-  "name": "remote-mcp-schwab-oauth",
+  "name": "schwab-mcp",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -39,5 +39,5 @@
   },
   "prettier": "@epic-web/config/prettier",
   "author": "Daniel Yeoman",
-  "license": "Private"
+  "license": "MIT"
 }
