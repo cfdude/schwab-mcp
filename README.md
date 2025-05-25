@@ -1,268 +1,285 @@
-# Model Context Protocol (MCP) Server + Google OAuth
+# Schwab MCP Server
 
-This is a
-[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)
-server that supports remote MCP connections, with Google OAuth built-in.
+A Model Context Protocol (MCP) server that provides comprehensive access to
+Schwab's trading and market data APIs through a secure OAuth 2.0 authentication
+flow. This server enables AI assistants like Claude to interact with Schwab
+accounts to retrieve market data, manage trading operations, and access account
+information.
 
-You can deploy it to your own Cloudflare account, and after you create your own
-Google Cloud OAuth client app, you'll have a fully functional remote MCP server
-that you can build off. Users will be able to connect to your MCP server by
-signing in with their Google account.
+## Overview
 
-You can use this as a reference example for how to integrate other OAuth
-providers with an MCP server deployed to Cloudflare, using the
-[`workers-oauth-provider` library](https://github.com/cloudflare/workers-oauth-provider).
+This MCP server acts as a bridge between AI assistants and the Schwab API,
+providing:
 
-The MCP server (powered by
-[Cloudflare Workers](https://developers.cloudflare.com/workers/)):
+- **Secure OAuth Authentication**: Implements Schwab's OAuth 2.0 flow with PKCE
+  for secure authentication
+- **Comprehensive Trading Tools**: Access to accounts, orders, quotes, and
+  transactions
+- **Market Data Tools**: Real-time quotes, price history, market hours, movers,
+  and options chains
+- **Account Privacy**: Built-in account identifier scrubbing to protect
+  sensitive information
+- **Enterprise-Ready**: Deployed on Cloudflare Workers with Durable Objects for
+  state management
 
-- Acts as OAuth _Server_ to your MCP clients
-- Acts as OAuth _Client_ to your _real_ OAuth server (in this case, Google)
+## Features
+
+### Trading Tools
+
+- **Account Management**
+  - `getAccounts`: Retrieve all account information with positions
+  - `getAccountNumbers`: Get list of account identifiers
+- **Order Management**
+  - `getOrders`: Fetch orders with filtering options
+- **Market Quotes**
+  - `getQuotes`: Get real-time quotes for multiple symbols
+  - `getQuote`: Get detailed quote for a single symbol
+- **Transaction History**
+  - `getTransactions`: Retrieve transaction history with date filtering
+  - `getTransaction`: Get details of a specific transaction
+
+### Market Data Tools
+
+- **Instrument Search**
+  - `searchInstruments`: Search for securities by symbol with projections
+- **Price History**
+  - `getPriceHistory`: Get historical price data with customizable periods
+- **Market Hours**
+  - `getMarketHours`: Check market operating hours by date
+  - `getMarket`: Get specific market information
+- **Market Movers**
+  - `getMovers`: Find top market movers by index
+- **Options Chains**
+  - `getOptionChain`: Retrieve options chain data with Greeks
+  - `getOptionExpiration`: Get option expiration dates
+
+### User Preferences
+
+- `getUserPreference`: Retrieve user trading preferences and settings
+
+## Prerequisites
+
+1. **Schwab Developer Account**: Register at
+   [Schwab Developer Portal](https://developer.schwab.com)
+2. **Cloudflare Account**: For deployment (free tier available)
+3. **Node.js**: Version 22.x or higher
 
 ## Getting Started
 
-Clone the repo & install dependencies: `npm install`
-
-### For Production
-
-Create a new
-[Google Cloud OAuth App](https://cloud.google.com/iam/docs/workforce-manage-oauth-app):
-
-- For the Homepage URL, specify
-  `https://mcp-google-oauth.<your-subdomain>.workers.dev`
-- For the Authorization callback URL, specify
-  `https://mcp-google-oauth.<your-subdomain>.workers.dev/callback`
-- Note your Client ID and generate a Client secret.
-- Set secrets via Wrangler
+### Installation
 
 ```bash
-npx wrangler secret put SCHWAB_CLIENT_ID
-npx wrangler secret put SCHWAB_CLIENT_SECRET
-npx wrangler secret put SCHWAB_REDIRECT_URI
-npx wrangler secret put COOKIE_ENCRYPTION_KEY # add any random string here e.g. openssl rand -hex 32
-npx wrangler secret put HOSTED_DOMAIN # optional: use this when restrict google account domain
-```
-
-#### Set up a KV namespace
-
-- Create the KV namespace: `wrangler kv:namespace create "OAUTH_KV"`
-- Update the Wrangler file with the KV ID
-
-#### Deploy & Test
-
-Deploy the MCP server to make it available on your workers.dev domain
-` wrangler deploy`
-
-Test the remote server using
-[Inspector](https://modelcontextprotocol.io/docs/tools/inspector):
-
-```
-npx @modelcontextprotocol/inspector@latest
-```
-
-Enter `https://mcp-google-oauth.<your-subdomain>.workers.dev/sse` and hit
-connect. Once you go through the authentication flow, you'll see the Tools
-working:
-
-<img width="640" alt="image" src="https://github.com/user-attachments/assets/7973f392-0a9d-4712-b679-6dd23f824287" />
-
-You now have a remote MCP server deployed!
-
-### Access Control
-
-This MCP server uses Google Cloud OAuth for authentication. All authenticated
-Google users can access basic tools like "add". When you restrict users with
-hosted domain, set `HOSTED_DOMAIN` env.
-
-### Access the remote MCP server from Claude Desktop
-
-Open Claude Desktop and navigate to Settings -> Developer -> Edit Config. This
-opens the configuration file that controls which MCP servers Claude can access.
-
-Replace the content with the following configuration. Once you restart Claude
-Desktop, a browser window will open showing your OAuth login page. Complete the
-authentication flow to grant Claude access to your MCP server. After you grant
-access, the tools will become available for you to use.
-
-```
-{
-  "mcpServers": {
-    "math": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "https://mcp-google-oauth.<your-subdomain>.workers.dev/sse"
-      ]
-    }
-  }
-}
-```
-
-Once the Tools (under 🔨) show up in the interface, you can ask Claude to use
-them. For example: "Could you use the math tool to add 23 and 19?". Claude
-should invoke the tool and show the result generated by the MCP server.
-
-### For Local Development
-
-If you'd like to iterate and test your MCP server, you can do so in local
-development. This will require you to create another OAuth App on Google Cloud:
-
-- For the Homepage URL, specify `http://localhost:8788`
-- For the Authorization callback URL, specify `http://localhost:8788/callback`
-- Note your Client ID and generate a Client secret.
-- Create a `.dev.vars` file in your project root with:
-
-```
-GOOGLE_CLIENT_ID=your_development_google_cloud_oauth_client_id
-GOOGLE_CLIENT_SECRET=your_development_google_cloud_oauth_client_secret
-```
-
-#### Develop & Test
-
-Run the server locally to make it available at `http://localhost:8788`
-`wrangler dev`
-
-To test the local server, enter `http://localhost:8788/sse` into Inspector and
-hit connect. Once you follow the prompts, you'll be able to "List Tools".
-
-#### Using Claude and other MCP Clients
-
-When using Claude to connect to your remote MCP server, you may see some error
-messages. This is because Claude Desktop doesn't yet support remote MCP servers,
-so it sometimes gets confused. To verify whether the MCP server is connected,
-hover over the 🔨 icon in the bottom right corner of Claude's interface. You
-should see your tools available there.
-
-#### Using Cursor and other MCP Clients
-
-To connect Cursor with your MCP server, choose `Type`: "Command" and in the
-`Command` field, combine the command and args fields into one (e.g.
-`npx mcp-remote https://<your-worker-name>.<your-subdomain>.workers.dev/sse`).
-
-Note that while Cursor supports HTTP+SSE servers, it doesn't support
-authentication, so you still need to use `mcp-remote` (and to use a STDIO
-server, not an HTTP one).
-
-You can connect your MCP server to other MCP clients like Windsurf by opening
-the client's configuration file, adding the same JSON that was used for the
-Claude setup, and restarting the MCP client.
-
-## How does it work?
-
-#### OAuth Provider
-
-The OAuth Provider library serves as a complete OAuth 2.1 server implementation
-for Cloudflare Workers. It handles the complexities of the OAuth flow, including
-token issuance, validation, and management. In this project, it plays the dual
-role of:
-
-- Authenticating MCP clients that connect to your server
-- Managing the connection to Google Cloud's OAuth services
-- Securely storing tokens and authentication state in KV storage
-
-#### Durable MCP
-
-Durable MCP extends the base MCP functionality with Cloudflare's Durable
-Objects, providing:
-
-- Persistent state management for your MCP server
-- Secure storage of authentication context between requests
-- Access to authenticated user information via `this.props`
-- Support for conditional tool availability based on user identity
-
-#### MCP Remote
-
-The MCP Remote library enables your server to expose tools that can be invoked
-by MCP clients like the Inspector. It:
-
-- Defines the protocol for communication between clients and your server
-- Provides a structured way to define tools
-- Handles serialization and deserialization of requests and responses
-- Maintains the Server-Sent Events (SSE) connection between clients and your
-  server
-
-# Schwab MCP
-
-## Schwab API Client
-
-This project includes a fully type-safe client for the Schwab API. It provides
-two ways to interact with the API:
-
-### Named Endpoint Functions
-
-Import specific endpoint functions for a clean, explicit API:
-
-```typescript
-import { getAccounts, createOrder, asAccountNumber } from './lib/schwabApi'
-import { OrderType, OrderSide, OrderDuration } from './tools/schemas'
-
-// Get accounts
-const accounts = await getAccounts(accessToken)
-
-// Create an order
-const order = await createOrder(accessToken, {
-	pathParams: { accountNumber: asAccountNumber('12345678') },
-	body: {
-		symbol: 'AAPL',
-		orderType: OrderType.MARKET,
-		side: OrderSide.BUY,
-		quantity: 1,
-		duration: OrderDuration.DAY,
-	},
-})
-```
-
-### Dynamic Proxy-based Access
-
-For more dynamic access patterns, use the Proxy-based client:
-
-```typescript
-import { Schwab, asAccountNumber } from './lib/schwabApi'
-import { OrderType, OrderSide, OrderDuration } from './tools/schemas'
-
-// Get accounts
-const accounts = await Schwab.GET__trader_v1_accounts(accessToken)
-
-// Create an order
-const order = await Schwab.POST__trader_v1_accounts_accountNumber_orders(
-	accessToken,
-	{
-		pathParams: { accountNumber: asAccountNumber('12345678') },
-		body: {
-			symbol: 'AAPL',
-			orderType: OrderType.MARKET,
-			side: OrderSide.BUY,
-			quantity: 1,
-			duration: OrderDuration.DAY,
-		},
-	},
-)
+git clone <repository-url>
+cd schwab-mcp
+npm install
 ```
 
 ### Configuration
 
-Switch between production and sandbox environments:
+#### 1. Create a Schwab App
 
-```typescript
-import { configureSchwabApi, SANDBOX_API_CONFIG } from './lib/schwabApi'
+1. Log in to the [Schwab Developer Portal](https://developer.schwab.com)
+2. Create a new app with:
+   - **App Name**: Your MCP server name
+   - **Callback URL**:
+     `https://schwab-mcp.<your-subdomain>.workers.dev/callback`
+   - **App Type**: Personal or third-party based on your use case
+3. Note your **App Key** (Client ID) and generate an **App Secret**
 
-// Use sandbox environment
-configureSchwabApi(SANDBOX_API_CONFIG)
+#### 2. Set Environment Variables
 
-// Or custom configuration
-configureSchwabApi({
-	baseUrl: 'https://your-custom-api-url.com',
-	environment: 'production',
-})
+```bash
+# Set production secrets via Wrangler
+npx wrangler secret put SCHWAB_CLIENT_ID      # Your Schwab App Key
+npx wrangler secret put SCHWAB_CLIENT_SECRET  # Your Schwab App Secret
+npx wrangler secret put SCHWAB_REDIRECT_URI   # https://schwab-mcp.<your-subdomain>.workers.dev/callback
+npx wrangler secret put COOKIE_ENCRYPTION_KEY # Generate with: openssl rand -hex 32
 ```
 
-### Type Safety
+#### 3. Set up KV Namespace
 
-All parameters and responses are fully typed:
+```bash
+# Create the KV namespace for storing OAuth tokens
+npx wrangler kv:namespace create "OAUTH_KV"
+```
 
-- Path parameters: Required for endpoints with URL placeholders
-- Query parameters: Validated against specific endpoint schemas
-- Request bodies: Strongly typed with zod validation
-- Responses: Parsed and validated against response schemas
+Update `wrangler.jsonc` with the generated KV namespace ID.
 
-This ensures you can't forget required parameters or pass the wrong data types.
+### Deployment
+
+```bash
+# Deploy to Cloudflare Workers
+npx wrangler deploy
+```
+
+Your MCP server will be available at
+`https://schwab-mcp.<your-subdomain>.workers.dev`
+
+### Testing with Inspector
+
+Test your deployment using the MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector@latest
+```
+
+Enter `https://schwab-mcp.<your-subdomain>.workers.dev/sse` and connect. You'll
+be prompted to authenticate with Schwab.
+
+## Usage
+
+### Claude Desktop Configuration
+
+### 1. Use Claude Integrations
+
+1. Go to the [Claude Desktop](https://www.anthropic.com/docs/claude-desktop)
+   settings
+2. Click on the "Integrations" tab
+3. Click on the "Add Custom Integration" button
+4. Enter the integration name "Schwab"
+5. Enter the MCP Server URL:
+   `https://schwab-mcp.<your-subdomain>.workers.dev/sse`
+6. Click on the "Add" button
+7. Click "Connect" and the Schwab Authentication flow will start.
+
+### 2. Add the MCP Server to your Claude Desktop configuration
+
+Add the following to your Claude Desktop configuration file:
+
+```json
+{
+	"mcpServers": {
+		"schwab": {
+			"command": "npx",
+			"args": [
+				"mcp-remote",
+				"https://schwab-mcp.<your-subdomain>.workers.dev/sse"
+			]
+		}
+	}
+}
+```
+
+Restart Claude Desktop. When you first use a Schwab tool, a browser window will
+open for authentication.
+
+### Example Commands
+
+Once connected, you can ask Claude to:
+
+- "Show me my Schwab account balances"
+- "Get a quote for AAPL"
+- "What are today's market movers in the $SPX?"
+- "Show me the options chain for TSLA"
+- "Get my recent transactions from the last week"
+
+### Local Development
+
+For local development, create a `.dev.vars` file:
+
+```env
+SCHWAB_CLIENT_ID=your_development_app_key
+SCHWAB_CLIENT_SECRET=your_development_app_secret
+SCHWAB_REDIRECT_URI=http://localhost:8788/callback
+COOKIE_ENCRYPTION_KEY=your_random_key
+```
+
+Run locally:
+
+```bash
+npm run dev
+# or
+wrangler dev
+```
+
+Connect to `http://localhost:8788/sse` using the Inspector.
+
+## Architecture
+
+### Technology Stack
+
+- **Runtime**: Cloudflare Workers with Durable Objects
+- **Authentication**: OAuth 2.0 with PKCE via
+  `@cloudflare/workers-oauth-provider`
+- **API Client**: `@sudowealth/schwab-api` for type-safe Schwab API access
+- **MCP Framework**: `@modelcontextprotocol/sdk` with `workers-mcp` adapter
+- **State Management**: KV storage for tokens, Durable Objects for session state
+
+### Security Features
+
+1. **OAuth 2.0 with PKCE**: Secure authentication flow preventing authorization
+   code interception
+2. **Token Management**: Automatic token refresh with secure storage in KV
+3. **Account Scrubbing**: Sensitive account identifiers are automatically
+   replaced with display names
+4. **Cookie Encryption**: Client approval state encrypted with AES-256
+
+### Project Structure
+
+```
+schwab-mcp/
+├── src/
+│   ├── index.ts           # Main entry point and MCP server setup
+│   ├── auth/              # OAuth authentication flow
+│   │   ├── handler.ts     # OAuth endpoint handlers
+│   │   ├── client.ts      # Schwab auth client setup
+│   │   └── ui/            # Approval dialog UI
+│   ├── tools/             # MCP tool implementations
+│   │   ├── market/        # Market data tools
+│   │   └── trader/        # Trading account tools
+│   ├── shared/            # Shared utilities
+│   │   ├── accountScrubber.ts  # Account privacy protection
+│   │   ├── logger.ts           # Centralized logging
+│   │   └── toolBuilder.ts      # Tool registration framework
+│   └── types/             # TypeScript type definitions
+├── package.json
+├── tsconfig.json
+└── wrangler.jsonc        # Cloudflare Workers configuration
+```
+
+## Development
+
+### Available Scripts
+
+```bash
+npm run dev        # Start development server
+npm run deploy     # Deploy to Cloudflare
+npm run typecheck  # Run TypeScript type checking
+npm run lint       # Run ESLint
+npm run format     # Format code with Prettier
+npm run validate   # Run typecheck and lint
+```
+
+### Debugging
+
+The server includes comprehensive logging. View logs in:
+
+- **Development**: Terminal output
+- **Production**: Cloudflare dashboard → Workers → Logs
+
+### Error Handling
+
+All API errors are caught and formatted with helpful context:
+
+- Authentication errors prompt for re-authentication
+- API errors include request IDs for troubleshooting
+- Network errors are retried automatically
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+MIT
+
+## Acknowledgments
+
+- Built with [Cloudflare Workers](https://workers.cloudflare.com/)
+- Uses [Model Context Protocol](https://modelcontextprotocol.io/)
+- Powered by
+  [@sudowealth/schwab-api](https://www.npmjs.com/package/@sudowealth/schwab-api)
