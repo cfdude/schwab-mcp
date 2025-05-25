@@ -1,10 +1,21 @@
 # Schwab MCP Server
 
-A Model Context Protocol (MCP) server that provides comprehensive access to
-Schwab's trading and market data APIs through a secure OAuth 2.0 authentication
-flow. This server enables AI assistants like Claude to interact with Schwab
-accounts to retrieve market data, manage trading operations, and access account
-information.
+This MCP server enables AI assistants like Claude to retrieve and interact with
+your Schwab accounts and Schwab's market data. For example, you can ask Claude
+to:
+
+- "Show me my Schwab account balances"
+- "Get a quote for AAPL"
+- "What are today's market movers in the $SPX?"
+- "Show me the options chain for TSLA"
+- "Get my recent transactions from the last week"
+
+## Unofficial MCP Server
+
+This is an unofficial, community-developed TypeScript MCP server for Charles
+Schwab. It has not been approved, endorsed, or certified by Charles Schwab. It
+is provided as-is, and its functionality may be incomplete or unstable. Use at
+your own risk, especially when dealing with financial data or transactions.
 
 ## Overview
 
@@ -214,29 +225,6 @@ Connect to `http://localhost:8788/sse` using the Inspector.
    replaced with display names
 4. **Cookie Encryption**: Client approval state encrypted with AES-256
 
-### Project Structure
-
-```
-schwab-mcp/
-├── src/
-│   ├── index.ts           # Main entry point and MCP server setup
-│   ├── auth/              # OAuth authentication flow
-│   │   ├── handler.ts     # OAuth endpoint handlers
-│   │   ├── client.ts      # Schwab auth client setup
-│   │   └── ui/            # Approval dialog UI
-│   ├── tools/             # MCP tool implementations
-│   │   ├── market/        # Market data tools
-│   │   └── trader/        # Trading account tools
-│   ├── shared/            # Shared utilities
-│   │   ├── accountScrubber.ts  # Account privacy protection
-│   │   ├── logger.ts           # Centralized logging
-│   │   └── toolBuilder.ts      # Tool registration framework
-│   └── types/             # TypeScript type definitions
-├── package.json
-├── tsconfig.json
-└── wrangler.jsonc        # Cloudflare Workers configuration
-```
-
 ## Development
 
 ### Available Scripts
@@ -259,7 +247,7 @@ The server includes comprehensive logging. View logs in:
 
 ### Error Handling
 
-All API errors are caught and formatted with helpful context:
+API errors are caught and formatted with helpful context:
 
 - Authentication errors prompt for re-authentication
 - API errors include request IDs for troubleshooting
