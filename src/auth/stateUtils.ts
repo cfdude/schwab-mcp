@@ -1,5 +1,6 @@
 import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
 import { safeBase64Decode } from '@sudowealth/schwab-api'
+import { getEnvironment } from '../config'
 import { logger } from '../shared/logger'
 import { AuthError, formatAuthError } from './errorMessages'
 
@@ -30,25 +31,124 @@ export interface StateData {
 }
 
 /**
- * Decodes and verifies a state parameter, returning structured data.
- * Safely handles base64 decoding before attempting to parse JSON.
+ * Creates an HMAC signature for state integrity verification
+ * @param data - The data to sign
+ * @param secret - The secret key for HMAC
+ * @returns Base64 encoded HMAC signature
+ */
+async function createHmacSignature(
+	data: string,
+	secret: string,
+): Promise<string> {
+	const encoder = new TextEncoder()
+	const key = await crypto.subtle.importKey(
+		'raw',
+		encoder.encode(secret),
+		{ name: 'HMAC', hash: 'SHA-256' },
+		false,
+		['sign'],
+	)
+
+	const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data))
+	return btoa(String.fromCharCode(...new Uint8Array(signature)))
+}
+
+/**
+ * Verifies the HMAC signature of the state data
+ * @param data - The data to verify
+ * @param signature - The signature to verify against
+ * @param secret - The secret key for HMAC
+ * @returns True if signature is valid
+ */
+async function verifyHmacSignature(
+	data: string,
+	signature: string,
+	secret: string,
+): Promise<boolean> {
+	const expectedSignature = await createHmacSignature(data, secret)
+	return expectedSignature === signature
+}
+
+/**
+ * Encodes state with integrity protection using HMAC
+ * @param state - The state object to encode
+ * @returns Base64 encoded state with HMAC signature
+ */
+export async function encodeStateWithIntegrity(
+	state: AuthRequest,
+): Promise<string> {
+	const env = getEnvironment()
+	const stateJson = JSON.stringify(state)
+	const stateBase64 = btoa(stateJson)
+	const signature = await createHmacSignature(
+		stateBase64,
+		env.COOKIE_ENCRYPTION_KEY,
+	)
+
+	// Combine state and signature
+	const signedState = JSON.stringify({
+		data: stateBase64,
+		signature: signature,
+	})
+
+	return btoa(signedState)
+}
+
+/**
+ * Decodes and verifies a state parameter with integrity checking.
+ * Handles the double-encoding issue and verifies HMAC signature.
  *
  * NOTE: This extracts the application-specific portion of the state after
  * EnhancedTokenManager has processed its PKCE-related data. The full original
  * stateParam should still be passed to ETM.exchangeCode() before using this function.
  *
  * @param stateParam - The state parameter to decode and verify.
- * @returns The parsed state data with typed access to common fields, or null if decoding fails.
+ * @returns The parsed state data with typed access to common fields, or null if decoding/verification fails.
  */
-export function decodeAndVerifyState(stateParam: string): AuthRequest | null {
+export async function decodeAndVerifyState(
+	stateParam: string,
+): Promise<AuthRequest | null> {
 	try {
-		// First URL-decode the state
-		const urlDecodedState = decodeURIComponent(stateParam)
+		const env = getEnvironment()
 
-		// Use the safer base64 decoder which handles URL-safe characters and padding
+		// The state parameter may be URL-encoded when received from query params
+		const decodedParam = stateParam.includes('%')
+			? decodeURIComponent(stateParam)
+			: stateParam
+
+		// Try to decode as our signed state format first
 		try {
-			const decodedState = safeBase64Decode(urlDecodedState)
-			// Parse JSON
+			const signedStateJson = safeBase64Decode(decodedParam)
+			const signedState = JSON.parse(signedStateJson) as {
+				data?: string
+				signature?: string
+			}
+
+			if (signedState.data && signedState.signature) {
+				// Verify HMAC signature
+				const isValid = await verifyHmacSignature(
+					signedState.data,
+					signedState.signature,
+					env.COOKIE_ENCRYPTION_KEY,
+				)
+
+				if (!isValid) {
+					logger.error('[ERROR] State HMAC signature verification failed')
+					return null
+				}
+
+				// Decode the verified state data
+				const stateJson = safeBase64Decode(signedState.data)
+				return JSON.parse(stateJson) as AuthRequest
+			}
+		} catch {
+			// Fall back to legacy format without HMAC for backward compatibility
+			logger.info('State not in signed format, trying legacy decoding')
+		}
+
+		// Legacy format: direct base64 encoded JSON
+		try {
+			const decodedState = safeBase64Decode(decodedParam)
 			return JSON.parse(decodedState) as AuthRequest
 		} catch (error) {
 			logger.error('[ERROR] Error in base64 decoding or JSON parsing:', error)

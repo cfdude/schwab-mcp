@@ -15,6 +15,7 @@ import { getEnvironment } from '../config'
 import { logger } from '../shared/logger'
 import { type Env } from '../types/env'
 import { AuthError, formatAuthError } from './errorMessages'
+import { encodeStateWithIntegrity } from './stateUtils'
 
 /**
  * Creates a Schwab Auth client with enhanced features
@@ -123,8 +124,9 @@ export async function redirectToSchwab(
 		// 1. Generate PKCE code_verifier and code_challenge
 		// 2. Embed our application state along with its code_verifier in the state parameter
 		// 3. Include code_challenge in the authorization URL as required by PKCE
+		const encodedState = await encodeStateWithIntegrity(oauthReqInfo)
 		const { authUrl } = await auth.getAuthorizationUrl({
-			state: btoa(JSON.stringify(oauthReqInfo)),
+			state: encodedState,
 		})
 
 		// Create redirect response with any additional headers

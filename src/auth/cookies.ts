@@ -8,7 +8,7 @@ import {
 } from './stateUtils'
 
 const MCP_APPROVAL = 'mcp-approved-clients'
-const ONE_YEAR_IN_SECONDS = 31536000
+const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365
 
 // --- Helper Functions ---
 
@@ -16,9 +16,10 @@ const ONE_YEAR_IN_SECONDS = 31536000
  * Converts an ArrayBuffer to a hex string
  * Uses Buffer in Node.js-compatible environments (enabled with nodejs_compat)
  */
-function toHex(buffer: ArrayBuffer): string {
-	// Using Buffer is more standard when available in the Workers environment
-	return Buffer.from(buffer).toString('hex')
+function toHex(ab: ArrayBuffer) {
+	return [...new Uint8Array(ab)]
+		.map((x) => x.toString(16).padStart(2, '0'))
+		.join('')
 }
 
 /**
@@ -49,6 +50,7 @@ async function importKey(secret: string): Promise<CryptoKey> {
 		const errorInfo = formatAuthError(AuthError.COOKIE_SECRET_MISSING)
 		throw new Error(errorInfo.message)
 	}
+	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
 	return crypto.subtle.importKey(
 		'raw',
@@ -66,6 +68,7 @@ async function importKey(secret: string): Promise<CryptoKey> {
  * @returns A promise resolving to the signature as a hex string.
  */
 async function signData(key: CryptoKey, data: string): Promise<string> {
+	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
 	const signatureBuffer = await crypto.subtle.sign(
 		'HMAC',
@@ -87,6 +90,7 @@ async function verifySignature(
 	signatureHex: string,
 	data: string,
 ): Promise<boolean> {
+	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
 	try {
 		return await crypto.subtle.verify(
@@ -321,7 +325,7 @@ export async function parseRedirectApproval(
 		}
 
 		encodedState = stateParam
-		const decodedState = decodeAndVerifyState(encodedState)
+		const decodedState = await decodeAndVerifyState(encodedState)
 		if (!decodedState) {
 			const errorInfo = formatAuthError(AuthError.INVALID_STATE)
 			throw new Error(errorInfo.message)

@@ -1,7 +1,4 @@
-import {
-	type OAuthHelpers,
-	type AuthRequest,
-} from '@cloudflare/workers-oauth-provider'
+import { type OAuthHelpers } from '@cloudflare/workers-oauth-provider'
 import {
 	createApiClient,
 	SchwabAuthError,
@@ -140,9 +137,12 @@ app.get('/callback', async (c) => {
 
 		// Parse the state using our utility function.
 		// `decodedStateAsAuthRequest` is the AuthRequest object itself that was sent to Schwab.
-		const decodedStateAsAuthRequest = decodeAndVerifyState(
-			stateParam,
-		) as AuthRequest
+		const decodedStateAsAuthRequest = await decodeAndVerifyState(stateParam)
+		if (!decodedStateAsAuthRequest) {
+			const errorInfo = formatAuthError(AuthError.INVALID_STATE)
+			logger.error(errorInfo.message)
+			return c.text(errorInfo.message, errorInfo.status)
+		}
 
 		// `extractClientIdFromState` will correctly get `decodedStateAsAuthRequest.clientId`.
 		// This also serves as validation that clientId exists within the decoded state.
