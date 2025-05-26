@@ -9,13 +9,12 @@ export type ToolHandler<S extends z.ZodSchema> = (
 	client: SchwabApiClient,
 ) => Promise<ToolResponse>
 
-export const toolRegistry = new Map<
-	string,
-	{
-		schema: z.ZodSchema
-		handler: ToolHandler<any>
-	}
->()
+export interface RegisteredTool<S extends z.ZodSchema> {
+	schema: S
+	handler: ToolHandler<S>
+}
+
+export const toolRegistry = new Map<string, RegisteredTool<any>>()
 
 export type ToolResponse<T = unknown> =
 	| { ok: true; data: T; message?: string }

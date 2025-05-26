@@ -3,6 +3,19 @@ import { logger } from './logger'
 
 export type AccountDisplayMap = Record<string, string>
 
+export type UnknownScrubbed<T> =
+	T extends Array<infer U>
+		? UnknownScrubbed<U>[]
+		: T extends object
+			? {
+					[K in keyof T as K extends 'accountNumber' | 'hashValue'
+						? never
+						: K]: UnknownScrubbed<T[K]>
+				} & {
+					accountDisplay?: string
+				}
+			: T
+
 /**
  * Build a mapping of account identifiers to a human friendly display string.
  * The mapping includes both raw account numbers and hashed account numbers.
@@ -34,12 +47,14 @@ export async function buildAccountDisplayMap(
  * Any property named "accountNumber" or "hashValue" will be removed and
  * replaced with an "accountDisplay" property using the provided display map.
  */
-export function scrubAccountIdentifiers(
-	data: any,
+export function scrubAccountIdentifiers<T>(
+	data: T,
 	displayMap: AccountDisplayMap,
-): any {
+): UnknownScrubbed<T> {
 	if (Array.isArray(data)) {
-		return data.map((item) => scrubAccountIdentifiers(item, displayMap))
+		return data.map((item) =>
+			scrubAccountIdentifiers(item, displayMap),
+		) as UnknownScrubbed<T>
 	}
 	if (data && typeof data === 'object') {
 		const result: Record<string, any> = {}
@@ -53,10 +68,10 @@ export function scrubAccountIdentifiers(
 			}
 			result[key] = scrubAccountIdentifiers(value, displayMap)
 		}
-		return result
+		return result as UnknownScrubbed<T>
 	}
 	if (typeof data === 'string' && displayMap[data]) {
-		return displayMap[data]
+		return displayMap[data] as UnknownScrubbed<T>
 	}
-	return data
+	return data as UnknownScrubbed<T>
 }

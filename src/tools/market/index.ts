@@ -17,7 +17,7 @@ interface ToolSpec<S extends z.ZodSchema<any, any>> {
 	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<any>
 }
 
-const MARKET_TOOLS: ToolSpec<any>[] = [
+const MARKET_TOOLS = [
 	{
 		name: 'searchInstruments',
 		schema: GetInstrumentsRequestQueryParamsSchema,
@@ -87,7 +87,7 @@ const MARKET_TOOLS: ToolSpec<any>[] = [
 				},
 			}),
 	},
-]
+] as const satisfies readonly ToolSpec<any>[]
 
 export function registerMarketTools(
 	client: SchwabApiClient,

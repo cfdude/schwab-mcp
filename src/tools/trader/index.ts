@@ -21,7 +21,7 @@ interface ToolSpec<S extends z.ZodSchema> {
 	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<any>
 }
 
-const TRADER_TOOLS: ToolSpec<any>[] = [
+const TRADER_TOOLS = [
 	{
 		name: 'getAccounts',
 		schema: GetAccountsRequestQueryParams,
@@ -150,7 +150,7 @@ const TRADER_TOOLS: ToolSpec<any>[] = [
 			return scrubAccountIdentifiers(userPreference, displayMap)
 		},
 	},
-]
+] as const satisfies readonly ToolSpec<any>[]
 
 export function registerTraderTools(
 	client: SchwabApiClient,
