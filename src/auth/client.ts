@@ -25,13 +25,13 @@ import { encodeStateWithIntegrity } from './stateUtils'
  * @returns Initialized Schwab auth client as EnhancedTokenManager
  */
 export function initializeSchwabAuthClient(
-        config: ValidatedEnv,
-        redirectUri = config.SCHWAB_REDIRECT_URI,
-        load?: () => Promise<TokenData | null>,
-        save?: (tokenData: TokenData) => Promise<void>,
+	config: ValidatedEnv,
+	redirectUri = config.SCHWAB_REDIRECT_URI,
+	load?: () => Promise<TokenData | null>,
+	save?: (tokenData: TokenData) => Promise<void>,
 ): EnhancedTokenManager {
-        const clientId = config.SCHWAB_CLIENT_ID
-        const clientSecret = config.SCHWAB_CLIENT_SECRET
+	const clientId = config.SCHWAB_CLIENT_ID
+	const clientSecret = config.SCHWAB_CLIENT_SECRET
 
 	logger.debug('Using centralized environment for Schwab Auth client')
 
@@ -100,21 +100,21 @@ export function initializeSchwabAuthClient(
  * @returns Redirect response to Schwab's authorization page
  */
 export async function redirectToSchwab(
-        c: Context<
-                {
-                        Bindings: Env & {
-                                OAUTH_PROVIDER: OAuthHelpers
-                        }
-                },
-                '/authorize',
-                BlankInput
-        >,
-        config: ValidatedEnv,
-        oauthReqInfo: AuthRequest,
-        headers: HeadersInit = {},
+	c: Context<
+		{
+			Bindings: Env & {
+				OAUTH_PROVIDER: OAuthHelpers
+			}
+		},
+		'/authorize',
+		BlankInput
+	>,
+	config: ValidatedEnv,
+	oauthReqInfo: AuthRequest,
+	headers: HeadersInit = {},
 ): Promise<Response> {
-        try {
-                const auth = initializeSchwabAuthClient(config)
+	try {
+		const auth = initializeSchwabAuthClient(config)
 
 		// Get the authorization URL with state parameter
 		// Pass application state to EnhancedTokenManager's getAuthorizationUrl
@@ -122,7 +122,7 @@ export async function redirectToSchwab(
 		// 1. Generate PKCE code_verifier and code_challenge
 		// 2. Embed our application state along with its code_verifier in the state parameter
 		// 3. Include code_challenge in the authorization URL as required by PKCE
-                const encodedState = await encodeStateWithIntegrity(config, oauthReqInfo)
+		const encodedState = await encodeStateWithIntegrity(config, oauthReqInfo)
 		const { authUrl } = await auth.getAuthorizationUrl({
 			state: encodedState,
 		})

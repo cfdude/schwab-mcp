@@ -3,9 +3,9 @@ import { logger } from '../shared/logger'
 import { type ValidatedEnv } from '../types/env'
 import { AuthError, formatAuthError } from './errorMessages'
 import {
-        decodeAndVerifyState,
-        extractClientIdFromState,
-        type StateData,
+	decodeAndVerifyState,
+	extractClientIdFromState,
+	type StateData,
 } from './stateUtils'
 
 const MCP_APPROVAL = 'mcp-approved-clients'
@@ -304,10 +304,10 @@ interface ParsedApprovalResult {
  * @throws If the request method is not POST, form data is invalid, or state is missing.
  */
 export async function parseRedirectApproval(
-        request: Request,
-        config: ValidatedEnv,
+	request: Request,
+	config: ValidatedEnv,
 ): Promise<ParsedApprovalResult> {
-        const cookieSecret = config.COOKIE_ENCRYPTION_KEY
+	const cookieSecret = config.COOKIE_ENCRYPTION_KEY
 	if (request.method !== 'POST') {
 		const errorInfo = formatAuthError(AuthError.INVALID_REQUEST_METHOD)
 		throw new Error(errorInfo.message)
@@ -326,8 +326,8 @@ export async function parseRedirectApproval(
 			throw new Error(errorInfo.message)
 		}
 
-                encodedState = stateParam
-                const decodedState = await decodeAndVerifyState(config, encodedState)
+		encodedState = stateParam
+		const decodedState = await decodeAndVerifyState(config, encodedState)
 		if (!decodedState) {
 			const errorInfo = formatAuthError(AuthError.INVALID_STATE)
 			throw new Error(errorInfo.message)

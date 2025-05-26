@@ -75,15 +75,15 @@ async function verifyHmacSignature(
  * @returns Base64 encoded state with HMAC signature
  */
 export async function encodeStateWithIntegrity(
-        config: ValidatedEnv,
-        state: AuthRequest,
+	config: ValidatedEnv,
+	state: AuthRequest,
 ): Promise<string> {
 	const stateJson = JSON.stringify(state)
 	const stateBase64 = btoa(stateJson)
-        const signature = await createHmacSignature(
-                stateBase64,
-                config.COOKIE_ENCRYPTION_KEY,
-        )
+	const signature = await createHmacSignature(
+		stateBase64,
+		config.COOKIE_ENCRYPTION_KEY,
+	)
 
 	// Combine state and signature
 	const signedState = JSON.stringify({
@@ -106,11 +106,10 @@ export async function encodeStateWithIntegrity(
  * @returns The parsed state data with typed access to common fields, or null if decoding/verification fails.
  */
 export async function decodeAndVerifyState(
-        config: ValidatedEnv,
-        stateParam: string,
+	config: ValidatedEnv,
+	stateParam: string,
 ): Promise<AuthRequest | null> {
-        try {
-
+	try {
 		// The state parameter may be URL-encoded when received from query params
 		const decodedParam = stateParam.includes('%')
 			? decodeURIComponent(stateParam)
@@ -126,11 +125,11 @@ export async function decodeAndVerifyState(
 
 			if (signedState.data && signedState.signature) {
 				// Verify HMAC signature
-                                const isValid = await verifyHmacSignature(
-                                        signedState.data,
-                                        signedState.signature,
-                                        config.COOKIE_ENCRYPTION_KEY,
-                                )
+				const isValid = await verifyHmacSignature(
+					signedState.data,
+					signedState.signature,
+					config.COOKIE_ENCRYPTION_KEY,
+				)
 
 				if (!isValid) {
 					logger.error('[ERROR] State HMAC signature verification failed')

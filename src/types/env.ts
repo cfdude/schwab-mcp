@@ -30,12 +30,12 @@ export interface Env {
 	/**
 	 * KV namespace for storing tokens
 	 */
-        OAUTH_KV?: KVNamespace
+	OAUTH_KV?: KVNamespace
 
-       /**
-        * Optional log level for application logging
-        */
-       LOG_LEVEL?: string
+	/**
+	 * Optional log level for application logging
+	 */
+	LOG_LEVEL?: string
 }
 
 /**
@@ -67,10 +67,10 @@ export interface ValidatedEnv {
 	/**
 	 * KV namespace for storing tokens
 	 */
-        readonly OAUTH_KV?: KVNamespace
+	readonly OAUTH_KV?: KVNamespace
 
-       /**
-        * Optional log level for application logging
-        */
-       readonly LOG_LEVEL?: string
+	/**
+	 * Optional log level for application logging
+	 */
+	readonly LOG_LEVEL?: string
 }

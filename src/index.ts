@@ -40,11 +40,11 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 	async init() {
 		try {
-                        logger.info('[MyMCP.init] STEP 0: Start')
-                        this.validatedConfig = buildConfig(this.env)
-                        makeLogger(this.validatedConfig.LOG_LEVEL ?? 'INFO')
-                        const redirectUri = this.validatedConfig.SCHWAB_REDIRECT_URI
-                        logger.info('[MyMCP.init] STEP 1: Env initialized.')
+			logger.info('[MyMCP.init] STEP 0: Start')
+			this.validatedConfig = buildConfig(this.env)
+			makeLogger(this.validatedConfig.LOG_LEVEL ?? 'INFO')
+			const redirectUri = this.validatedConfig.SCHWAB_REDIRECT_URI
+			logger.info('[MyMCP.init] STEP 1: Env initialized.')
 
 			// Use schwab-api's TokenSet for the function signatures
 			const saveTokenForETM = async (tokenSet: TokenData) => {
@@ -91,12 +91,12 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			// 1. Create ETM instance (synchronous)
 			if (!this.tokenManager) {
 				logger.info('[MyMCP.init] STEP 3A: Creating new ETM instance...')
-                                this.tokenManager = initializeSchwabAuthClient(
-                                        this.validatedConfig,
-                                        redirectUri,
-                                        loadTokenForETM,
-                                        saveTokenForETM,
-                                ) // This is synchronous
+				this.tokenManager = initializeSchwabAuthClient(
+					this.validatedConfig,
+					redirectUri,
+					loadTokenForETM,
+					saveTokenForETM,
+				) // This is synchronous
 				logger.info('[MyMCP.init] STEP 3B: New ETM instance created.')
 			} else {
 				logger.info('[MyMCP.init] STEP 3: Re-using existing ETM instance.')
@@ -272,19 +272,19 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				? this.tokenManager.constructor.name
 				: 'undefined',
 		}
-                try {
-                        const env = this.validatedConfig ?? buildConfig(this.env)
-                        diagnosticInfo.environment = {
-                                hasClientId: !!env.SCHWAB_CLIENT_ID,
-                                hasClientSecret: !!env.SCHWAB_CLIENT_SECRET,
-                                hasRedirectUri: !!env.SCHWAB_REDIRECT_URI,
-                                hasCookieKey: !!env.COOKIE_ENCRYPTION_KEY,
-                                hasOAuthKV: !!env.OAUTH_KV,
-                        }
-                } catch (envError) {
-                        diagnosticInfo.environmentError =
-                                envError instanceof Error ? envError.message : String(envError)
-                }
+		try {
+			const env = this.validatedConfig ?? buildConfig(this.env)
+			diagnosticInfo.environment = {
+				hasClientId: !!env.SCHWAB_CLIENT_ID,
+				hasClientSecret: !!env.SCHWAB_CLIENT_SECRET,
+				hasRedirectUri: !!env.SCHWAB_REDIRECT_URI,
+				hasCookieKey: !!env.COOKIE_ENCRYPTION_KEY,
+				hasOAuthKV: !!env.OAUTH_KV,
+			}
+		} catch (envError) {
+			diagnosticInfo.environmentError =
+				envError instanceof Error ? envError.message : String(envError)
+		}
 
 		if (this.tokenManager) {
 			try {
