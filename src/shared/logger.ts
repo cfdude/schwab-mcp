@@ -3,7 +3,7 @@
  * Includes different log levels and ensures sensitive data is not logged
  */
 
-enum LogLevel {
+export enum LogLevel {
 	DEBUG = 0,
 	INFO = 1,
 	WARN = 2,
@@ -12,15 +12,31 @@ enum LogLevel {
 
 // Current log level for the application
 // Can be set based on environment
-const currentLogLevel = LogLevel.INFO
+let currentLogLevel = LogLevel.INFO
+
+// Default keys to redact
+const DEFAULT_REDACT_KEYS = [
+	'password',
+	'secret',
+	'token',
+	'key',
+	'auth',
+	'authorization',
+	'cookie',
+	'session',
+]
+
+// Custom redact keys that can be configured by consumers
+let customRedactKeys: string[] = []
 
 /**
  * Sanitizes log data to ensure no tokens or sensitive information is logged
  *
  * @param data The data to be sanitized
+ * @param maxSize Optional max size for truncating large objects/arrays
  * @returns Sanitized data safe for logging
  */
-function sanitizeLogData(data: any): any {
+function sanitizeLogData(data: any, maxSize?: number): any {
 	if (typeof data === 'string') {
 		// Redact potential tokens from strings
 		return data
@@ -28,6 +44,7 @@ function sanitizeLogData(data: any): any {
 				/Bearer\s+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_.+/=]*/g,
 				'Bearer [REDACTED]',
 			)
+			.replace(/Basic\s+[A-Za-z0-9+/=]+/g, 'Basic [REDACTED]')
 			.replace(
 				/accessToken["']?\s*:\s*["']?[^"',}]*["']?/g,
 				'accessToken: "[REDACTED]"',
@@ -44,20 +61,30 @@ function sanitizeLogData(data: any): any {
 
 	if (typeof data === 'object') {
 		if (Array.isArray(data)) {
-			return data.map(sanitizeLogData)
+			// Handle size limits for arrays
+			if (maxSize && data.length > maxSize) {
+				const preview = data
+					.slice(0, maxSize)
+					.map((item) => sanitizeLogData(item, maxSize))
+				return {
+					__preview__: true,
+					items: preview,
+					totalCount: data.length,
+					truncated: true,
+				}
+			}
+			return data.map((item) => sanitizeLogData(item, maxSize))
 		}
 
 		const sanitized: Record<string, any> = {}
+		const allRedactKeys = [...DEFAULT_REDACT_KEYS, ...customRedactKeys]
+
 		for (const [key, value] of Object.entries(data)) {
-			// Skip sensitive keys entirely
-			if (
-				['password', 'secret', 'token', 'key', 'auth'].some((k) =>
-					key.toLowerCase().includes(k),
-				)
-			) {
+			// Check if key should be redacted
+			if (allRedactKeys.some((k) => key.toLowerCase().includes(k))) {
 				sanitized[key] = '[REDACTED]'
 			} else {
-				sanitized[key] = sanitizeLogData(value)
+				sanitized[key] = sanitizeLogData(value, maxSize)
 			}
 		}
 		return sanitized
@@ -77,7 +104,10 @@ function sanitizeLogData(data: any): any {
 function log(level: LogLevel, message: string, data?: any, contextId?: string) {
 	if (level < currentLogLevel) return
 
-	const sanitizedData = data ? sanitizeLogData(data) : undefined
+	// Apply size limits to prevent Cloudflare console overflow (16KB limit)
+	// For large objects, show preview only
+	const maxSize = 2 // Show first 2 items for large arrays
+	const sanitizedData = data ? sanitizeLogData(data, maxSize) : undefined
 	const timestamp = new Date().toISOString()
 	const levelName = LogLevel[level]
 	const contextPrefix = contextId ? `[${contextId}] ` : ''
@@ -132,4 +162,19 @@ export const logger = {
 		error: (message: string, data?: any) =>
 			log(LogLevel.ERROR, message, data, contextId),
 	}),
+
+	// Configuration methods
+	setLevel: (level: LogLevel) => {
+		currentLogLevel = level
+	},
+
+	getLevel: () => currentLogLevel,
+
+	configureRedactKeys: (keys: string[]) => {
+		customRedactKeys = keys
+	},
+
+	addRedactKeys: (keys: string[]) => {
+		customRedactKeys = [...customRedactKeys, ...keys]
+	},
 }
