@@ -116,7 +116,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			logger.info(
 				'[MyMCP.init] STEP 5A: Proactively calling this.tokenManager.initialize() (async)...',
 			)
-			const etmInitSuccess = await this.tokenManager.initialize()
+			const etmInitSuccess = this.tokenManager.initialize()
 			logger.info(
 				`[MyMCP.init] STEP 5B: Proactive ETM initialization complete. Success: ${etmInitSuccess}`,
 			)
@@ -146,7 +146,16 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 			// 4. Register tools (this.server.tool calls are synchronous)
 			logger.info('[MyMCP.init] STEP 7A: Calling registerTools...')
-			await this.registerTools(this.client)
+			registerAccountTools(this.client, this.server)
+			registerInstrumentTools(this.client, this.server)
+			registerMarketHoursTools(this.client, this.server)
+			registerMoversTools(this.client, this.server)
+			registerOptionsTools(this.client, this.server)
+			registerOrderTools(this.client, this.server)
+			registerPriceHistoryTools(this.client, this.server)
+			registerQuotesTools(this.client, this.server)
+			registerTransactionTools(this.client, this.server)
+			registerUserPreferenceTools(this.client, this.server)
 			logger.info('[MyMCP.init] STEP 7B: registerTools completed.')
 
 			logger.info('[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY')
@@ -157,21 +166,6 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			})
 			throw error // Re-throw to ensure DO framework sees the failure
 		}
-	}
-
-	private async registerTools(client: SchwabApiClient) {
-		logger.info('[MyMCP] Starting specific tool registration...')
-		registerAccountTools(client, this.server)
-		registerInstrumentTools(client, this.server)
-		registerMarketHoursTools(client, this.server)
-		registerMoversTools(client, this.server)
-		registerOptionsTools(client, this.server)
-		registerOrderTools(client, this.server)
-		registerPriceHistoryTools(client, this.server)
-		registerQuotesTools(client, this.server)
-		registerTransactionTools(client, this.server)
-		registerUserPreferenceTools(client, this.server)
-		logger.info('[MyMCP] Finished specific tool registration.')
 	}
 
 	async onReconnect() {
