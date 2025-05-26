@@ -1,7 +1,6 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { type SchwabApiClient } from '@sudowealth/schwab-api'
 import { z } from 'zod'
-import { type Result } from '../types/result'
 import { logger } from './logger'
 
 // 1. Define and export the toolRegistry
@@ -16,21 +15,19 @@ export const toolRegistry = new Map<
 	}
 >()
 
-type ToolResponse<T = any> =
-	| { success: true; data: T; message?: string }
-	| { success: false; error: Error; details?: Record<string, any> }
+export type ToolResponse<T = unknown> =
+	| { ok: true; data: T; message?: string }
+	| { ok: false; error: Error; details?: Record<string, unknown> }
 
 type McpContentArray = {
 	content: Array<{ type: string; text: string }>
 	isError?: boolean
 }
 
-export function formatResponse(
-	response: ToolResponse | Result<any>,
-): McpContentArray {
+export function formatResponse(response: ToolResponse): McpContentArray {
 	// Handle ToolResponse format
-	if (response && 'success' in response) {
-		if (response.success) {
+	if (response && 'ok' in response) {
+		if (response.ok) {
 			const dataToLog = 'data' in response ? response.data : null
 			const message =
 				('message' in response && response.message) ||
@@ -122,7 +119,7 @@ export function toolError(
 		details: enhancedDetails,
 		stack: error.stack,
 	})
-	return { success: false, error, details: enhancedDetails }
+	return { ok: false, error, details: enhancedDetails }
 }
 
 export function toolSuccess<T>({
@@ -139,7 +136,7 @@ export function toolSuccess<T>({
 		dataPreview: Array.isArray(data) ? `Array of ${count} items` : typeof data,
 		count,
 	})
-	return { success: true, data, message }
+	return { ok: true, data, message }
 }
 
 export function createTool<S extends z.ZodSchema<any, any>>(
