@@ -13,12 +13,8 @@ import { getEnvironment, initializeEnvironment } from './config'
 import { logger } from './shared/logger'
 import {
 	registerAccountTools,
-	registerInstrumentTools,
-	registerMarketHoursTools,
-	registerMoversTools,
-	registerOptionsTools,
+	registerMarketTools,
 	registerOrderTools,
-	registerPriceHistoryTools,
 	registerQuotesTools,
 	registerTransactionTools,
 	registerUserPreferenceTools,
@@ -139,12 +135,8 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			// 4. Register tools (this.server.tool calls are synchronous)
 			logger.info('[MyMCP.init] STEP 7A: Calling registerTools...')
 			registerAccountTools(this.client, this.server)
-			registerInstrumentTools(this.client, this.server)
-			registerMarketHoursTools(this.client, this.server)
-			registerMoversTools(this.client, this.server)
-			registerOptionsTools(this.client, this.server)
+			registerMarketTools(this.client, this.server)
 			registerOrderTools(this.client, this.server)
-			registerPriceHistoryTools(this.client, this.server)
 			registerQuotesTools(this.client, this.server)
 			registerTransactionTools(this.client, this.server)
 			registerUserPreferenceTools(this.client, this.server)
