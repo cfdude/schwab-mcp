@@ -235,14 +235,16 @@ app.get('/callback', async (c) => {
 				: 'unknown',
 		})
 
-		// Create API client
+		// Create (or reuse) API client
 		logger.info('Creating Schwab API client')
 		let client
 		try {
-			client = await createApiClient({
-				config: { environment: 'PRODUCTION' },
-				auth,
-			})
+			client =
+				globalThis.__schwabClient ??
+				(globalThis.__schwabClient = createApiClient({
+					config: { environment: 'PRODUCTION' },
+					auth,
+				}))
 		} catch (clientError) {
 			logger.error('Failed to create API client', {
 				error: clientError,
