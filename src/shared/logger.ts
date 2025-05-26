@@ -178,3 +178,9 @@ export const logger = {
 		customRedactKeys = [...customRedactKeys, ...keys]
 	},
 }
+
+export function makeLogger(level: string): typeof logger {
+       const mapped = LogLevel[level.toUpperCase() as keyof typeof LogLevel]
+       currentLogLevel = mapped ?? LogLevel.INFO
+       return logger
+}

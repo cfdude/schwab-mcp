@@ -1,10 +1,11 @@
 import { safeBase64Decode, safeBase64Encode } from '@sudowealth/schwab-api'
 import { logger } from '../shared/logger'
+import { type ValidatedEnv } from '../types/env'
 import { AuthError, formatAuthError } from './errorMessages'
 import {
-	decodeAndVerifyState,
-	extractClientIdFromState,
-	type StateData,
+        decodeAndVerifyState,
+        extractClientIdFromState,
+        type StateData,
 } from './stateUtils'
 
 const MCP_APPROVAL = 'mcp-approved-clients'
@@ -298,14 +299,15 @@ interface ParsedApprovalResult {
  * and generates Set-Cookie headers to mark the client as approved.
  *
  * @param request - The incoming POST Request object containing the form data.
- * @param cookieSecret - The secret key used to sign the approval cookie.
+ * @param config - Validated environment configuration
  * @returns A promise resolving to an object containing the parsed state and necessary headers.
  * @throws If the request method is not POST, form data is invalid, or state is missing.
  */
 export async function parseRedirectApproval(
-	request: Request,
-	cookieSecret: string,
+        request: Request,
+        config: ValidatedEnv,
 ): Promise<ParsedApprovalResult> {
+        const cookieSecret = config.COOKIE_ENCRYPTION_KEY
 	if (request.method !== 'POST') {
 		const errorInfo = formatAuthError(AuthError.INVALID_REQUEST_METHOD)
 		throw new Error(errorInfo.message)
@@ -324,8 +326,8 @@ export async function parseRedirectApproval(
 			throw new Error(errorInfo.message)
 		}
 
-		encodedState = stateParam
-		const decodedState = await decodeAndVerifyState(encodedState)
+                encodedState = stateParam
+                const decodedState = await decodeAndVerifyState(config, encodedState)
 		if (!decodedState) {
 			const errorInfo = formatAuthError(AuthError.INVALID_STATE)
 			throw new Error(errorInfo.message)
