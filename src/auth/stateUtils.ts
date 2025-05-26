@@ -1,7 +1,7 @@
 import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
 import { safeBase64Decode } from '@sudowealth/schwab-api'
-import { getEnvironment } from '../config'
 import { logger } from '../shared/logger'
+import { type ValidatedEnv } from '../types/env'
 import { ClientIdExtractionError } from './errors'
 
 /**
@@ -75,14 +75,14 @@ async function verifyHmacSignature(
  * @returns Base64 encoded state with HMAC signature
  */
 export async function encodeStateWithIntegrity(
+	config: ValidatedEnv,
 	state: AuthRequest,
 ): Promise<string> {
-	const env = getEnvironment()
 	const stateJson = JSON.stringify(state)
 	const stateBase64 = btoa(stateJson)
 	const signature = await createHmacSignature(
 		stateBase64,
-		env.COOKIE_ENCRYPTION_KEY,
+		config.COOKIE_ENCRYPTION_KEY,
 	)
 
 	// Combine state and signature
@@ -106,11 +106,10 @@ export async function encodeStateWithIntegrity(
  * @returns The parsed state data with typed access to common fields, or null if decoding/verification fails.
  */
 export async function decodeAndVerifyState(
+	config: ValidatedEnv,
 	stateParam: string,
 ): Promise<AuthRequest | null> {
 	try {
-		const env = getEnvironment()
-
 		// The state parameter may be URL-encoded when received from query params
 		const decodedParam = stateParam.includes('%')
 			? decodeURIComponent(stateParam)
@@ -129,7 +128,7 @@ export async function decodeAndVerifyState(
 				const isValid = await verifyHmacSignature(
 					signedState.data,
 					signedState.signature,
-					env.COOKIE_ENCRYPTION_KEY,
+					config.COOKIE_ENCRYPTION_KEY,
 				)
 
 				if (!isValid) {

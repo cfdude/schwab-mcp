@@ -9,8 +9,8 @@ import {
 } from '@sudowealth/schwab-api'
 import { DurableMCP } from 'workers-mcp'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
-import { getEnvironment, initializeEnvironment } from './config'
-import { logger } from './shared/logger'
+import { buildConfig } from './config'
+import { logger, makeLogger } from './shared/logger'
 import {
 	registerAccountTools,
 	registerMarketTools,
@@ -36,7 +36,8 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	async init() {
 		try {
 			logger.info('[MyMCP.init] STEP 0: Start')
-			this.validatedConfig = initializeEnvironment(this.env)
+			this.validatedConfig = buildConfig(this.env)
+			makeLogger(this.validatedConfig.LOG_LEVEL ?? 'INFO')
 			const redirectUri = this.validatedConfig.SCHWAB_REDIRECT_URI
 			logger.info('[MyMCP.init] STEP 1: Env initialized.')
 
@@ -86,6 +87,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			if (!this.tokenManager) {
 				logger.info('[MyMCP.init] STEP 3A: Creating new ETM instance...')
 				this.tokenManager = initializeSchwabAuthClient(
+					this.validatedConfig,
 					redirectUri,
 					loadTokenForETM,
 					saveTokenForETM,
@@ -255,7 +257,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				: 'undefined',
 		}
 		try {
-			const env = getEnvironment()
+			const env = this.validatedConfig ?? buildConfig(this.env)
 			diagnosticInfo.environment = {
 				hasClientId: !!env.SCHWAB_CLIENT_ID,
 				hasClientSecret: !!env.SCHWAB_CLIENT_SECRET,

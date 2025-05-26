@@ -11,9 +11,8 @@ import {
 } from '@sudowealth/schwab-api'
 import { type Context } from 'hono'
 import { type BlankInput } from 'hono/types'
-import { getEnvironment } from '../config'
 import { logger } from '../shared/logger'
-import { type Env } from '../types/env'
+import { type ValidatedEnv, type Env } from '../types/env'
 import { AuthUrlError, formatAuthError } from './errors'
 import { encodeStateWithIntegrity } from './stateUtils'
 
@@ -26,14 +25,13 @@ import { encodeStateWithIntegrity } from './stateUtils'
  * @returns Initialized Schwab auth client as EnhancedTokenManager
  */
 export function initializeSchwabAuthClient(
-	redirectUri: string,
+	config: ValidatedEnv,
+	redirectUri = config.SCHWAB_REDIRECT_URI,
 	load?: () => Promise<TokenData | null>,
 	save?: (tokenData: TokenData) => Promise<void>,
 ): EnhancedTokenManager {
-	// Get credentials directly from the centralized environment
-	const env = getEnvironment()
-	const clientId = env.SCHWAB_CLIENT_ID
-	const clientSecret = env.SCHWAB_CLIENT_SECRET
+	const clientId = config.SCHWAB_CLIENT_ID
+	const clientSecret = config.SCHWAB_CLIENT_SECRET
 
 	logger.debug('Using centralized environment for Schwab Auth client')
 
@@ -96,6 +94,7 @@ export function initializeSchwabAuthClient(
  * Redirects the user to Schwab's authorization page
  *
  * @param c Hono context
+ * @param config Validated environment configuration
  * @param oauthReqInfo OAuth request information
  * @param headers Optional headers to include in the response
  * @returns Redirect response to Schwab's authorization page
@@ -110,13 +109,12 @@ export async function redirectToSchwab(
 		'/authorize',
 		BlankInput
 	>,
+	config: ValidatedEnv,
 	oauthReqInfo: AuthRequest,
 	headers: HeadersInit = {},
 ): Promise<Response> {
 	try {
-		// Use the configured redirect URI from environment
-		const redirectUri = getEnvironment().SCHWAB_REDIRECT_URI
-		const auth = initializeSchwabAuthClient(redirectUri)
+		const auth = initializeSchwabAuthClient(config)
 
 		// Get the authorization URL with state parameter
 		// Pass application state to EnhancedTokenManager's getAuthorizationUrl
@@ -124,7 +122,7 @@ export async function redirectToSchwab(
 		// 1. Generate PKCE code_verifier and code_challenge
 		// 2. Embed our application state along with its code_verifier in the state parameter
 		// 3. Include code_challenge in the authorization URL as required by PKCE
-		const encodedState = await encodeStateWithIntegrity(oauthReqInfo)
+		const encodedState = await encodeStateWithIntegrity(config, oauthReqInfo)
 		const { authUrl } = await auth.getAuthorizationUrl({
 			state: encodedState,
 		})

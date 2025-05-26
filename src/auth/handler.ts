@@ -7,7 +7,7 @@ import {
 	type TokenData,
 } from '@sudowealth/schwab-api'
 import { Hono } from 'hono'
-import { getEnvironment } from '../config'
+import { buildConfig } from '../config'
 import { logger } from '../shared/logger'
 import { type Env } from '../types/env'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
@@ -25,17 +25,13 @@ import {
 	ApiResponseError,
 	formatAuthError,
 } from './errors'
-import { ensureEnvInitialized } from './middlewares'
 import { decodeAndVerifyState, extractClientIdFromState } from './stateUtils'
 import { renderApprovalDialog } from './ui'
 
 // Create Hono app with appropriate bindings
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>()
 
-// Apply middleware to ensure environment is initialized
-app.use('*', ensureEnvInitialized)
-
-// No need to store config locally, we'll use the centralized environment
+// No need to store config locally, we'll build it per request
 
 /**
  * GET /authorize - Entry point for OAuth authorization flow
@@ -46,6 +42,7 @@ app.use('*', ensureEnvInitialized)
  */
 app.get('/authorize', async (c) => {
 	try {
+		const config = buildConfig(c.env)
 		const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw)
 		const { clientId } = oauthReqInfo
 
@@ -61,10 +58,10 @@ app.get('/authorize', async (c) => {
 			await clientIdAlreadyApproved(
 				c.req.raw,
 				oauthReqInfo.clientId,
-				getEnvironment().COOKIE_ENCRYPTION_KEY,
+				config.COOKIE_ENCRYPTION_KEY,
 			)
 		) {
-			return redirectToSchwab(c, oauthReqInfo)
+			return redirectToSchwab(c, config, oauthReqInfo)
 		}
 
 		// Otherwise, render the approval dialog
@@ -93,10 +90,8 @@ app.get('/authorize', async (c) => {
  */
 app.post('/authorize', async (c) => {
 	try {
-		const { state, headers } = await parseRedirectApproval(
-			c.req.raw,
-			getEnvironment().COOKIE_ENCRYPTION_KEY,
-		)
+		const config = buildConfig(c.env)
+		const { state, headers } = await parseRedirectApproval(c.req.raw, config)
 
 		if (!state.oauthReqInfo) {
 			const error = new MissingStateError()
@@ -121,7 +116,7 @@ app.post('/authorize', async (c) => {
 			return c.text('Invalid state information', errorInfo.status as any)
 		}
 
-		return redirectToSchwab(c, authRequestForSchwab, headers)
+		return redirectToSchwab(c, config, authRequestForSchwab, headers)
 	} catch (error) {
 		const authError = new AuthApprovalError()
 		const errorInfo = formatAuthError(authError, { error })
@@ -139,6 +134,7 @@ app.post('/authorize', async (c) => {
  */
 app.get('/callback', async (c) => {
 	try {
+		const config = buildConfig(c.env)
 		// Extract state and code from query parameters
 		const stateParam = c.req.query('state')
 		const code = c.req.query('code')
@@ -155,7 +151,10 @@ app.get('/callback', async (c) => {
 
 		// Parse the state using our utility function.
 		// `decodedStateAsAuthRequest` is the AuthRequest object itself that was sent to Schwab.
-		const decodedStateAsAuthRequest = await decodeAndVerifyState(stateParam)
+		const decodedStateAsAuthRequest = await decodeAndVerifyState(
+			config,
+			stateParam,
+		)
 		if (!decodedStateAsAuthRequest) {
 			const error = new InvalidStateError()
 			const errorInfo = formatAuthError(error)
@@ -186,25 +185,28 @@ app.get('/callback', async (c) => {
 		}
 
 		// Set up redirect URI and token storage for KV
-		const redirectUri = getEnvironment().SCHWAB_REDIRECT_URI
+		const redirectUri = config.SCHWAB_REDIRECT_URI
 		const userIdForKV = clientIdFromState // Use the validated clientId for KV key consistency
 
 		const saveToken = async (tokenData: TokenData) => {
-			await getEnvironment().OAUTH_KV?.put(
+			await config.OAUTH_KV?.put(
 				`token:${userIdForKV}`,
 				JSON.stringify(tokenData),
 			)
 		}
 
 		const loadToken = async (): Promise<TokenData | null> => {
-			const tokenStr = await getEnvironment().OAUTH_KV?.get(
-				`token:${userIdForKV}`,
-			)
+			const tokenStr = await config.OAUTH_KV?.get(`token:${userIdForKV}`)
 			return tokenStr ? (JSON.parse(tokenStr) as TokenData) : null
 		}
 
 		// Use the validated config for auth client to ensure consistency
-		const auth = initializeSchwabAuthClient(redirectUri, loadToken, saveToken)
+		const auth = initializeSchwabAuthClient(
+			config,
+			redirectUri,
+			loadToken,
+			saveToken,
+		)
 
 		// Exchange the code for tokens with enhanced error handling
 		logger.info(
