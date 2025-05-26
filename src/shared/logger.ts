@@ -25,7 +25,7 @@ const DEFAULT_SECRET_PATTERNS: SecretPattern[] = [
 	// Bearer tokens
 	{
 		pattern:
-			/Bearer\s+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_.+/=]*/g,
+			/Bearer\s+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_\.\+\/=]*/g,
 		replacement: 'Bearer [REDACTED]',
 	},
 	// Basic auth
@@ -35,12 +35,12 @@ const DEFAULT_SECRET_PATTERNS: SecretPattern[] = [
 	},
 	// Access tokens in JSON-like strings
 	{
-		pattern: /accessToken["']?\s*:\s*["']?[^"',}]*["']?/g,
+		pattern: /accessToken["']?\s*:\s*["']?[A-Za-z0-9\-_\.\+\/=]+["']?/g,
 		replacement: 'accessToken: "[REDACTED]"',
 	},
 	// Refresh tokens in JSON-like strings
 	{
-		pattern: /refreshToken["']?\s*:\s*["']?[^"',}]*["']?/g,
+		pattern: /refreshToken["']?\s*:\s*["']?[A-Za-z0-9\-_\.\+\/=]+["']?/g,
 		replacement: 'refreshToken: "[REDACTED]"',
 	},
 	// API keys

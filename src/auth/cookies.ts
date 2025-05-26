@@ -217,7 +217,7 @@ async function createSignedCookie(
  * @returns The Set-Cookie header value.
  */
 function createApprovalCookieHeader(cookieValue: string): string {
-	return `${MCP_APPROVAL}=${cookieValue}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=${ONE_YEAR_IN_SECONDS}`
+	return `${MCP_APPROVAL}=${cookieValue}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=${ONE_YEAR_IN_SECONDS}`
 }
 
 /**
