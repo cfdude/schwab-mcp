@@ -14,7 +14,48 @@ export enum LogLevel {
 // Can be set based on environment
 let currentLogLevel = LogLevel.INFO
 
-// Default keys to redact
+// Configurable regex patterns for masking secrets
+export interface SecretPattern {
+	pattern: RegExp
+	replacement: string
+}
+
+// Default patterns for common secrets
+const DEFAULT_SECRET_PATTERNS: SecretPattern[] = [
+	// Bearer tokens
+	{
+		pattern:
+			/Bearer\s+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_.+/=]*/g,
+		replacement: 'Bearer [REDACTED]',
+	},
+	// Basic auth
+	{
+		pattern: /Basic\s+[A-Za-z0-9+/=]+/g,
+		replacement: 'Basic [REDACTED]',
+	},
+	// Access tokens in JSON-like strings
+	{
+		pattern: /accessToken["']?\s*:\s*["']?[^"',}]*["']?/g,
+		replacement: 'accessToken: "[REDACTED]"',
+	},
+	// Refresh tokens in JSON-like strings
+	{
+		pattern: /refreshToken["']?\s*:\s*["']?[^"',}]*["']?/g,
+		replacement: 'refreshToken: "[REDACTED]"',
+	},
+	// API keys
+	{
+		pattern: /api[_-]?key["']?\s*[:=]\s*["']?[A-Za-z0-9\-_]{20,}["']?/gi,
+		replacement: 'api_key: "[REDACTED]"',
+	},
+	// Passwords in URLs
+	{
+		pattern: /:\/\/[^:]+:([^@]+)@/g,
+		replacement: '://[USER]:[REDACTED]@',
+	},
+]
+
+// Default keys to redact in objects
 const DEFAULT_REDACT_KEYS = [
 	'password',
 	'secret',
@@ -26,7 +67,8 @@ const DEFAULT_REDACT_KEYS = [
 	'session',
 ]
 
-// Custom redact keys that can be configured by consumers
+// Custom patterns and keys that can be configured by consumers
+let customSecretPatterns: SecretPattern[] = []
 let customRedactKeys: string[] = []
 
 /**
@@ -38,21 +80,15 @@ let customRedactKeys: string[] = []
  */
 function sanitizeLogData(data: any, maxSize?: number): any {
 	if (typeof data === 'string') {
-		// Redact potential tokens from strings
-		return data
-			.replace(
-				/Bearer\s+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_.+/=]*/g,
-				'Bearer [REDACTED]',
-			)
-			.replace(/Basic\s+[A-Za-z0-9+/=]+/g, 'Basic [REDACTED]')
-			.replace(
-				/accessToken["']?\s*:\s*["']?[^"',}]*["']?/g,
-				'accessToken: "[REDACTED]"',
-			)
-			.replace(
-				/refreshToken["']?\s*:\s*["']?[^"',}]*["']?/g,
-				'refreshToken: "[REDACTED]"',
-			)
+		// Apply all secret patterns in a single pass
+		const allPatterns = [...DEFAULT_SECRET_PATTERNS, ...customSecretPatterns]
+		let sanitizedString = data
+
+		for (const { pattern, replacement } of allPatterns) {
+			sanitizedString = sanitizedString.replace(pattern, replacement)
+		}
+
+		return sanitizedString
 	}
 
 	if (data === null || data === undefined) {
@@ -176,6 +212,14 @@ export const logger = {
 
 	addRedactKeys: (keys: string[]) => {
 		customRedactKeys = [...customRedactKeys, ...keys]
+	},
+
+	configureSecretPatterns: (patterns: SecretPattern[]) => {
+		customSecretPatterns = patterns
+	},
+
+	addSecretPatterns: (patterns: SecretPattern[]) => {
+		customSecretPatterns = [...customSecretPatterns, ...patterns]
 	},
 }
 
