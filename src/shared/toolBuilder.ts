@@ -4,19 +4,19 @@ import { z } from 'zod'
 import { logger } from './logger'
 
 // 1. Define and export the toolRegistry
-export type ToolHandler<S extends z.ZodSchema> = (
+type ToolHandler<S extends z.ZodSchema> = (
 	input: z.infer<S>,
 	client: SchwabApiClient,
 ) => Promise<ToolResponse>
 
-export interface RegisteredTool<S extends z.ZodSchema> {
+interface RegisteredTool<S extends z.ZodSchema> {
 	schema: S
 	handler: ToolHandler<S>
 }
 
-export const toolRegistry = new Map<string, RegisteredTool<any>>()
+const toolRegistry = new Map<string, RegisteredTool<any>>()
 
-export type ToolResponse<T = unknown> =
+type ToolResponse<T = unknown> =
 	| { ok: true; data: T; message?: string }
 	| { ok: false; error: Error; details?: Record<string, unknown> }
 
@@ -25,7 +25,7 @@ type McpContentArray = {
 	isError?: boolean
 }
 
-export function formatResponse(response: ToolResponse): McpContentArray {
+function formatResponse(response: ToolResponse): McpContentArray {
 	// Handle ToolResponse format
 	if (response && 'ok' in response) {
 		if (response.ok) {

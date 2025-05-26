@@ -3,7 +3,7 @@
  * Includes different log levels and ensures sensitive data is not logged
  */
 
-export enum LogLevel {
+enum LogLevel {
 	DEBUG = 0,
 	INFO = 1,
 	WARN = 2,
@@ -15,7 +15,7 @@ export enum LogLevel {
 let currentLogLevel = LogLevel.INFO
 
 // Configurable regex patterns for masking secrets
-export interface SecretPattern {
+interface SecretPattern {
 	pattern: RegExp
 	replacement: string
 }

@@ -3,7 +3,7 @@ import { logger } from './logger'
 
 export type AccountDisplayMap = Record<string, string>
 
-export type UnknownScrubbed<T> =
+type UnknownScrubbed<T> =
 	T extends Array<infer U>
 		? UnknownScrubbed<U>[]
 		: T extends object

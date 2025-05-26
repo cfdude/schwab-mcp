@@ -45,12 +45,6 @@ export class InvalidStateError extends AuthError {
 	}
 }
 
-export class CookieDecodeError extends AuthError {
-	constructor() {
-		super('Could not decode state', 400)
-	}
-}
-
 export class InvalidCookieFormatError extends AuthError {
 	constructor() {
 		super('Invalid cookie format received', 400)
@@ -137,7 +131,7 @@ export class CookieSecretMissingError extends AuthError {
 /**
  * Standardized JSON error response structure
  */
-export interface JsonErrorResponse {
+interface JsonErrorResponse {
 	code: string
 	message: string
 	requestId?: string

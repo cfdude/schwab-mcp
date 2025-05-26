@@ -3,7 +3,7 @@ import { logger } from '../shared/logger'
 /**
  * Validates redirect URIs against an allowlist of trusted patterns
  */
-export class RedirectValidator {
+class RedirectValidator {
 	private readonly allowedPatterns: RegExp[]
 
 	constructor(patterns: string[]) {
@@ -68,7 +68,7 @@ export class RedirectValidator {
 }
 
 // Default allowlist patterns for common MCP client redirect URIs
-export const DEFAULT_REDIRECT_PATTERNS = [
+const DEFAULT_REDIRECT_PATTERNS = [
 	// Exact matches for known MCP clients
 	'^https://claude\\.ai/api/auth/callback$',
 	'^https://www\\.anthropic\\.com/mcp/auth/callback$',
