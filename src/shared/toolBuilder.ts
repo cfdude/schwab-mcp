@@ -6,16 +6,16 @@ import { logger } from './logger'
 
 // 1. Define and export the toolRegistry
 export type ToolHandler<S extends z.ZodSchema<any, any>> = (
-        input: z.infer<S>,
-        client: SchwabApiClient,
+	input: z.infer<S>,
+	client: SchwabApiClient,
 ) => Promise<ToolResponse>
 
 export const toolRegistry = new Map<
-        string,
-        {
-                schema: z.ZodSchema<any, any>
-                handler: ToolHandler<any>
-        }
+	string,
+	{
+		schema: z.ZodSchema<any, any>
+		handler: ToolHandler<any>
+	}
 >()
 
 type ToolResponse<T = any> =
@@ -145,17 +145,17 @@ export function toolSuccess<T>({
 }
 
 export function createTool<S extends z.ZodSchema<any, any>>(
-        client: SchwabApiClient,
-        server: McpServer,
-        {
-                name,
-                schema,
-                handler,
-        }: {
-                name: string
-                schema: S
-                handler: ToolHandler<S>
-        },
+	client: SchwabApiClient,
+	server: McpServer,
+	{
+		name,
+		schema,
+		handler,
+	}: {
+		name: string
+		schema: S
+		handler: ToolHandler<S>
+	},
 ) {
 	// Populate the internal toolRegistry
 	toolRegistry.set(name, { schema, handler })
@@ -192,8 +192,8 @@ export function createTool<S extends z.ZodSchema<any, any>>(
 						}),
 					)
 				}
-                                const result = await handler(parsedInput, client)
-                                return formatResponse(result) as any
+				const result = await handler(parsedInput, client)
+				return formatResponse(result) as any
 			} catch (error) {
 				logger.error(`Unexpected error in direct tool: ${name}`, {
 					error: error instanceof Error ? error.message : String(error),
