@@ -1,31 +1,59 @@
+import { z } from 'zod'
 import { type Env, type ValidatedEnv } from '../../types/env'
 import { logger } from '../shared/logger'
 
-export const REQUIRED_VARS = [
-	'SCHWAB_CLIENT_ID',
-	'SCHWAB_CLIENT_SECRET',
-	'COOKIE_ENCRYPTION_KEY',
-	'SCHWAB_REDIRECT_URI',
-] as const
+const envSchema = z.object({
+	SCHWAB_CLIENT_ID: z
+		.string({
+			required_error: 'SCHWAB_CLIENT_ID is required for OAuth authentication',
+		})
+		.min(1, 'SCHWAB_CLIENT_ID cannot be empty'),
+
+	SCHWAB_CLIENT_SECRET: z
+		.string({
+			required_error:
+				'SCHWAB_CLIENT_SECRET is required for OAuth authentication',
+		})
+		.min(1, 'SCHWAB_CLIENT_SECRET cannot be empty'),
+
+	COOKIE_ENCRYPTION_KEY: z
+		.string({
+			required_error:
+				'COOKIE_ENCRYPTION_KEY is required for secure cookie storage',
+		})
+		.min(1, 'COOKIE_ENCRYPTION_KEY cannot be empty'),
+
+	SCHWAB_REDIRECT_URI: z
+		.string({
+			required_error: 'SCHWAB_REDIRECT_URI is required for OAuth callback',
+		})
+		.url('SCHWAB_REDIRECT_URI must be a valid URL'),
+
+	OAUTH_KV: z.any().optional(),
+
+	LOG_LEVEL: z
+		.enum(['debug', 'info', 'warn', 'error'])
+		.optional()
+		.default('info'),
+})
 
 export function buildConfig(env: Env): ValidatedEnv {
-	const missing: string[] = []
-	for (const name of REQUIRED_VARS) {
-		const value = (env as any)[name]
-		if (!value) missing.push(name)
-	}
-	if (missing.length > 0) {
-		const msg = `Missing required environment variables: ${missing.join(', ')}`
-		logger.error(msg)
-		throw new Error(msg)
-	}
+	try {
+		const validated = envSchema.parse(env)
+		return Object.freeze(validated) as ValidatedEnv
+	} catch (error) {
+		if (error instanceof z.ZodError) {
+			const issues = error.issues
+				.map((issue) => {
+					const path = issue.path.join('.')
+					return `  - ${path}: ${issue.message}`
+				})
+				.join('\n')
 
-	return Object.freeze({
-		SCHWAB_CLIENT_ID: env.SCHWAB_CLIENT_ID,
-		SCHWAB_CLIENT_SECRET: env.SCHWAB_CLIENT_SECRET,
-		COOKIE_ENCRYPTION_KEY: env.COOKIE_ENCRYPTION_KEY,
-		SCHWAB_REDIRECT_URI: env.SCHWAB_REDIRECT_URI,
-		OAUTH_KV: env.OAUTH_KV,
-		LOG_LEVEL: env.LOG_LEVEL,
-	})
+			const msg = `Environment validation failed:\n${issues}`
+			logger.error(msg)
+			throw new Error(msg)
+		}
+		throw error
+	}
 }

@@ -54,7 +54,7 @@ async function createHmacSignature(
 }
 
 /**
- * Verifies the HMAC signature of the state data
+ * Verifies the HMAC signature of the state data using timing-safe comparison
  * @param data - The data to verify
  * @param signature - The signature to verify against
  * @param secret - The secret key for HMAC
@@ -65,8 +65,33 @@ async function verifyHmacSignature(
 	signature: string,
 	secret: string,
 ): Promise<boolean> {
-	const expectedSignature = await createHmacSignature(data, secret)
-	return expectedSignature === signature
+	const encoder = new TextEncoder()
+	const key = await crypto.subtle.importKey(
+		'raw',
+		encoder.encode(secret),
+		{ name: 'HMAC', hash: 'SHA-256' },
+		false,
+		['verify'],
+	)
+
+	// Decode the base64 signature to get the raw bytes
+	try {
+		const signatureBytes = Uint8Array.from(atob(signature), (c) =>
+			c.charCodeAt(0),
+		)
+
+		// Use crypto.subtle.verify for timing-safe comparison
+		return await crypto.subtle.verify(
+			'HMAC',
+			key,
+			signatureBytes,
+			encoder.encode(data),
+		)
+	} catch (e) {
+		// If decoding fails, signature is invalid
+		logger.error('[ERROR] Error in verifyHmacSignature:', e)
+		return false
+	}
 }
 
 /**
