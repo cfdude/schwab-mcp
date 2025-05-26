@@ -8,7 +8,6 @@ import {
 	GetTransactionsRequestQueryParams,
 } from '@sudowealth/schwab-api'
 import z from 'zod'
-import type * as Z from 'zod'
 import {
 	buildAccountDisplayMap,
 	scrubAccountIdentifiers,
@@ -16,10 +15,10 @@ import {
 import { logger } from '../../shared/logger'
 import { createTool, toolError, toolSuccess } from '../../shared/toolBuilder'
 
-interface ToolSpec<S extends Z.ZodSchema> {
+interface ToolSpec<S extends z.ZodSchema> {
 	name: string
 	schema: S
-	call: (client: SchwabApiClient, params: Z.infer<S>) => Promise<any>
+	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<any>
 }
 
 const TRADER_TOOLS: ToolSpec<any>[] = [
