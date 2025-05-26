@@ -11,14 +11,7 @@ import { DurableMCP } from 'workers-mcp'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
 import { buildConfig } from './config'
 import { logger, makeLogger } from './shared/logger'
-import {
-	registerAccountTools,
-	registerMarketTools,
-	registerOrderTools,
-	registerQuotesTools,
-	registerTransactionTools,
-	registerUserPreferenceTools,
-} from './tools'
+import { registerMarketTools, registerTraderTools } from './tools'
 import { type ValidatedEnv } from './types/env'
 // Align MyMCPProps with schwab-api's TokenSet for consistency
 type MyMCPProps = Partial<TokenData>
@@ -136,12 +129,8 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 			// 4. Register tools (this.server.tool calls are synchronous)
 			logger.info('[MyMCP.init] STEP 7A: Calling registerTools...')
-			registerAccountTools(this.client, this.server)
 			registerMarketTools(this.client, this.server)
-			registerOrderTools(this.client, this.server)
-			registerQuotesTools(this.client, this.server)
-			registerTransactionTools(this.client, this.server)
-			registerUserPreferenceTools(this.client, this.server)
+			registerTraderTools(this.client, this.server)
 			logger.info('[MyMCP.init] STEP 7B: registerTools completed.')
 
 			logger.info('[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY')
