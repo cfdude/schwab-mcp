@@ -135,6 +135,16 @@ export class CookieSecretMissingError extends AuthError {
 }
 
 /**
+ * Standardized JSON error response structure
+ */
+export interface JsonErrorResponse {
+	code: string
+	message: string
+	requestId?: string
+	details?: Record<string, any>
+}
+
+/**
  * Formats an error response with appropriate logging
  * Now simplified to work with Error objects that have status property
  *
@@ -156,5 +166,21 @@ export function formatAuthError(
 		message: error.message,
 		status: error.status ?? 500,
 		details,
+	}
+}
+
+/**
+ * Creates a JSON error response for HTTP responses
+ */
+export function createJsonErrorResponse(
+	error: AuthError,
+	requestId?: string,
+	additionalDetails?: Record<string, any>,
+): JsonErrorResponse {
+	return {
+		code: error.constructor.name,
+		message: error.message,
+		...(requestId && { requestId }),
+		...(additionalDetails && { details: additionalDetails }),
 	}
 }

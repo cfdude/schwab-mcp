@@ -1,4 +1,6 @@
 import { type ClientInfo } from '@cloudflare/workers-oauth-provider'
+import { logger } from '../../shared/logger'
+import { defaultRedirectValidator } from '../redirectValidator'
 
 // CSS for the approval dialog
 const APPROVAL_CSS = `
@@ -145,6 +147,20 @@ body {
   color: var(--text-color);
 }
 
+.warning {
+  background-color: #fff3e0;
+  border: 1px solid #ff9800;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  color: #e65100;
+}
+
+.warning-icon {
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+
 /* Responsive adjustments */
 @media (max-width: 640px) {
   .container {
@@ -251,11 +267,24 @@ export function renderApprovalDialog(
 			? sanitizeHtml(client.contacts.join(', '))
 			: ''
 
-	// Get redirect URIs
-	const redirectUris =
-		client?.redirectUris && client.redirectUris.length > 0
-			? client.redirectUris.map((uri) => sanitizeHtml(uri))
-			: []
+	// Get and validate redirect URIs
+	let redirectUris: string[] = []
+	let hasInvalidRedirectUris = false
+	if (client?.redirectUris && client.redirectUris.length > 0) {
+		// Validate each redirect URI against the allowlist
+		const validUris = defaultRedirectValidator.filterValidRedirectUris(
+			client.redirectUris,
+		)
+
+		if (validUris.length !== client.redirectUris.length) {
+			hasInvalidRedirectUris = true
+			logger.warn(
+				`Client ${clientName} has invalid redirect URIs. Valid: ${validUris.length}/${client.redirectUris.length}`,
+			)
+		}
+
+		redirectUris = validUris.map((uri) => sanitizeHtml(uri))
+	}
 
 	// Generate HTML for the approval dialog
 	const htmlContent = `
@@ -281,6 +310,17 @@ export function renderApprovalDialog(
           <div class="card">
             
             <h2 class="alert"><strong>${clientName || 'A new MCP Client'}</strong> is requesting access</h1>
+            
+            ${
+							hasInvalidRedirectUris
+								? `
+              <div class="warning">
+                <span class="warning-icon">⚠️</span>
+                <strong>Security Warning:</strong> Some redirect URIs provided by this client are not in the allowed list and have been filtered out for your security.
+              </div>
+            `
+								: ''
+						}
             
             <div class="client-info">
               <div class="client-detail">
