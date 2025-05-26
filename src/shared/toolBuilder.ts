@@ -5,16 +5,16 @@ import { logger } from './logger'
 
 // 1. Define and export the toolRegistry
 export type ToolHandler<S extends z.ZodSchema> = (
-        input: z.infer<S>,
-        client: SchwabApiClient,
+	input: z.infer<S>,
+	client: SchwabApiClient,
 ) => Promise<ToolResponse>
 
 export const toolRegistry = new Map<
-        string,
-        {
-                schema: z.ZodSchema
-                handler: ToolHandler<any>
-        }
+	string,
+	{
+		schema: z.ZodSchema
+		handler: ToolHandler<any>
+	}
 >()
 
 export type ToolResponse<T = unknown> =
