@@ -8,11 +8,11 @@ import {
 	type TokenData,
 } from '@sudowealth/schwab-api'
 import { DurableMCP } from 'workers-mcp'
+import { type ValidatedEnv } from '../types/env'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
 import { buildConfig } from './config'
 import { logger, makeLogger } from './shared/logger'
 import { registerMarketTools, registerTraderTools } from './tools'
-import { type ValidatedEnv } from './types/env'
 // Align MyMCPProps with schwab-api's TokenSet for consistency
 type MyMCPProps = Partial<TokenData>
 

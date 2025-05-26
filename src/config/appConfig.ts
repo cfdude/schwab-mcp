@@ -1,5 +1,5 @@
+import { type Env, type ValidatedEnv } from '../../types/env'
 import { logger } from '../shared/logger'
-import { type Env, type ValidatedEnv } from '../types/env'
 
 export const REQUIRED_VARS = [
 	'SCHWAB_CLIENT_ID',

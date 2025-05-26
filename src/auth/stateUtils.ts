@@ -1,7 +1,7 @@
 import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
 import { safeBase64Decode } from '@sudowealth/schwab-api'
+import { type ValidatedEnv } from '../../types/env'
 import { logger } from '../shared/logger'
-import { type ValidatedEnv } from '../types/env'
 import { ClientIdExtractionError } from './errors'
 
 /**

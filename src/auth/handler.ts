@@ -7,9 +7,9 @@ import {
 	type TokenData,
 } from '@sudowealth/schwab-api'
 import { Hono } from 'hono'
+import { type Env } from '../../types/env'
 import { buildConfig } from '../config'
 import { logger } from '../shared/logger'
-import { type Env } from '../types/env'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
 import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
 import {
