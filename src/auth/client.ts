@@ -12,7 +12,7 @@ import {
 import { type Context } from 'hono'
 import { type BlankInput } from 'hono/types'
 import { logger } from '../shared/logger'
-import { type Env } from '../types/env'
+import { type ValidatedEnv, type Env } from '../types/env'
 import { AuthUrlError, formatAuthError } from './errors'
 import { encodeStateWithIntegrity } from './stateUtils'
 

@@ -25,7 +25,6 @@ import {
 	ApiResponseError,
 	formatAuthError,
 } from './errors'
-import { ensureEnvInitialized } from './middlewares'
 import { decodeAndVerifyState, extractClientIdFromState } from './stateUtils'
 import { renderApprovalDialog } from './ui'
 

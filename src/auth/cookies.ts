@@ -1,5 +1,5 @@
 import { safeBase64Decode, safeBase64Encode } from '@sudowealth/schwab-api'
-import { logger } from '../shared/logger
+import { logger } from '../shared/logger'
 import { type ValidatedEnv } from '../types/env'
 import {
 	CookieSecretMissingError,
