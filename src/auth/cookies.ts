@@ -1,6 +1,13 @@
 import { safeBase64Decode, safeBase64Encode } from '@sudowealth/schwab-api'
 import { logger } from '../shared/logger'
-import { AuthError, formatAuthError } from './errorMessages'
+import {
+	CookieSecretMissingError,
+	InvalidCookieFormatError,
+	CookieSignatureError,
+	InvalidRequestMethodError,
+	MissingFormStateError,
+	InvalidStateError,
+} from './errors'
 import {
 	decodeAndVerifyState,
 	extractClientIdFromState,
@@ -47,8 +54,7 @@ function fromHex(hexString: string): ArrayBuffer {
  */
 async function importKey(secret: string): Promise<CryptoKey> {
 	if (!secret) {
-		const errorInfo = formatAuthError(AuthError.COOKIE_SECRET_MISSING)
-		throw new Error(errorInfo.message)
+		throw new CookieSecretMissingError()
 	}
 	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
@@ -140,8 +146,8 @@ async function verifyAndDecodeCookie<T>(
 
 	const parts = cookieValue.split('.')
 	if (parts.length !== 2) {
-		const errorInfo = formatAuthError(AuthError.INVALID_COOKIE_FORMAT)
-		logger.warn(errorInfo.message)
+		const error = new InvalidCookieFormatError()
+		logger.warn(error.message)
 		return undefined
 	}
 
@@ -174,8 +180,8 @@ async function verifyAndDecodeCookie<T>(
 	const isValid = await verifySignature(key, signatureHex, payloadString)
 
 	if (!isValid) {
-		const errorInfo = formatAuthError(AuthError.COOKIE_SIGNATURE_FAILED)
-		logger.warn(errorInfo.message)
+		const error = new CookieSignatureError()
+		logger.warn(error.message)
 		return undefined
 	}
 
@@ -307,8 +313,7 @@ export async function parseRedirectApproval(
 	cookieSecret: string,
 ): Promise<ParsedApprovalResult> {
 	if (request.method !== 'POST') {
-		const errorInfo = formatAuthError(AuthError.INVALID_REQUEST_METHOD)
-		throw new Error(errorInfo.message)
+		throw new InvalidRequestMethodError()
 	}
 
 	let encodedState: string
@@ -320,15 +325,13 @@ export async function parseRedirectApproval(
 		const stateParam = formData.get('state')
 
 		if (typeof stateParam !== 'string' || !stateParam) {
-			const errorInfo = formatAuthError(AuthError.MISSING_FORM_STATE)
-			throw new Error(errorInfo.message)
+			throw new MissingFormStateError()
 		}
 
 		encodedState = stateParam
 		const decodedState = await decodeAndVerifyState(encodedState)
 		if (!decodedState) {
-			const errorInfo = formatAuthError(AuthError.INVALID_STATE)
-			throw new Error(errorInfo.message)
+			throw new InvalidStateError()
 		}
 		state = decodedState
 		clientId = extractClientIdFromState(state)
