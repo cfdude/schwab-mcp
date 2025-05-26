@@ -13,18 +13,13 @@ import { buildConfig } from './config'
 import { logger, makeLogger } from './shared/logger'
 import {
 	registerAccountTools,
-	registerInstrumentTools,
-	registerMarketHoursTools,
-	registerMoversTools,
-	registerOptionsTools,
+	registerMarketTools,
 	registerOrderTools,
-	registerPriceHistoryTools,
 	registerQuotesTools,
 	registerTransactionTools,
 	registerUserPreferenceTools,
 } from './tools'
 import { type ValidatedEnv } from './types/env'
-
 // Align MyMCPProps with schwab-api's TokenSet for consistency
 type MyMCPProps = Partial<TokenData>
 
@@ -124,37 +119,26 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			)
 
 			// 3. Create SchwabApiClient AFTER tokens are loaded
-			if (
-				!this.client ||
-				(this.client._context?.config as any)?.auth !== this.tokenManager
-			) {
-				logger.info(
-					'[MyMCP.init] STEP 6A: Calling createApiClient (now sync)...',
-				)
-				// Client creation is now synchronous with the ETM
-				this.client = createApiClient({
+			const globalClient =
+				globalThis.__schwabClient ??
+				(globalThis.__schwabClient = createApiClient({
 					config: {
 						environment: 'PRODUCTION',
 						logger: mcpLogger,
 						enableLogging: true,
 						logLevel: 'debug',
 					},
-					auth: this.tokenManager, // Pass the ETM instance
-				})
-				logger.info('[MyMCP.init] STEP 6B: createApiClient completed (sync).')
-			} else {
-				logger.info('[MyMCP.init] STEP 6: Re-using existing SchwabApiClient.')
-			}
+					auth: this.tokenManager,
+				}))
+
+			this.client = globalClient
+			logger.info('[MyMCP.init] STEP 6: SchwabApiClient ready.')
 
 			// 4. Register tools (this.server.tool calls are synchronous)
 			logger.info('[MyMCP.init] STEP 7A: Calling registerTools...')
 			registerAccountTools(this.client, this.server)
-			registerInstrumentTools(this.client, this.server)
-			registerMarketHoursTools(this.client, this.server)
-			registerMoversTools(this.client, this.server)
-			registerOptionsTools(this.client, this.server)
+			registerMarketTools(this.client, this.server)
 			registerOrderTools(this.client, this.server)
-			registerPriceHistoryTools(this.client, this.server)
 			registerQuotesTools(this.client, this.server)
 			registerTransactionTools(this.client, this.server)
 			registerUserPreferenceTools(this.client, this.server)
