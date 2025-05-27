@@ -18,8 +18,12 @@ export const toolRegistry = new Map<
 >()
 
 export type ToolResponse<T = unknown> =
-	| { ok: true; data: T; message?: string }
-	| { ok: false; error: Error; details?: Record<string, unknown> }
+        | { ok: true; data: T; message?: string }
+        | { ok: false; error: Error; details?: Record<string, unknown> }
+
+export function isOk<T>(res: ToolResponse<T>): res is { ok: true; data: T; message?: string } {
+        return res.ok
+}
 
 type McpContentArray = {
 	content: Array<{ type: string; text: string }>
@@ -27,10 +31,10 @@ type McpContentArray = {
 }
 
 export function formatResponse(response: ToolResponse): McpContentArray {
-	// Handle ToolResponse format
-	if (response && 'ok' in response) {
-		if (response.ok) {
-			const dataToLog = 'data' in response ? response.data : null
+        // Handle ToolResponse format
+        if ('ok' in response) {
+                if (isOk(response)) {
+                        const dataToLog = 'data' in response ? response.data : null
 			const message =
 				('message' in response && response.message) ||
 				(dataToLog && (dataToLog as any).message) ||

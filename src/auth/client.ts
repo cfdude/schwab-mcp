@@ -13,7 +13,7 @@ import { type Context } from 'hono'
 import { type BlankInput } from 'hono/types'
 import { type ValidatedEnv, type Env } from '../../types/env'
 import { logger } from '../shared/logger'
-import { AuthUrlError, formatAuthError } from './errors'
+import { createAuthError, formatAuthError } from './errors'
 import { encodeStateWithIntegrity } from './stateUtils'
 
 /**
@@ -139,10 +139,10 @@ export async function redirectToSchwab(
 		} else {
 			return Response.redirect(authUrl, 302)
 		}
-	} catch (error) {
-		const authError = new AuthUrlError()
-		const errorInfo = formatAuthError(authError, { error })
-		logger.error(errorInfo.message, { error })
-		return new Response(errorInfo.message, { status: errorInfo.status })
-	}
+        } catch (error) {
+                const authError = createAuthError('AuthUrl')
+                const errorInfo = formatAuthError(authError, { error })
+                logger.error(errorInfo.message, { error })
+                return new Response(errorInfo.message, { status: errorInfo.status })
+        }
 }

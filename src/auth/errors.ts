@@ -1,186 +1,97 @@
-/**
- * Custom error classes for auth module with built-in status codes
- *
- * These error classes extend Error and include HTTP status codes as properties,
- * eliminating the need for separate mapping tables.
- */
+// Auth error definitions simplified using discriminated unions
+import { LogLevel, logger } from '../shared/logger'
 
-// Base auth error class
-export class AuthError extends Error {
-	status: number
+export type AuthErrorKind =
+  | 'MissingClientId'
+  | 'MissingState'
+  | 'MissingParameters'
+  | 'InvalidState'
+  | 'CookieDecode'
+  | 'InvalidCookieFormat'
+  | 'InvalidRequestMethod'
+  | 'MissingFormState'
+  | 'ClientIdExtraction'
+  | 'CookieSignature'
+  | 'AuthRequest'
+  | 'AuthApproval'
+  | 'AuthCallback'
+  | 'AuthUrl'
+  | 'NoUserId'
+  | 'TokenExchange'
+  | 'ApiResponse'
+  | 'CookieSecretMissing'
 
-	constructor(message: string, status = 500) {
-		super(message)
-		this.name = this.constructor.name
-		this.status = status
-		// Maintain proper stack trace in V8
-		if (Error.captureStackTrace) {
-			Error.captureStackTrace(this, this.constructor)
-		}
-	}
+export interface AuthError {
+  kind: AuthErrorKind
+  status: number
+  message: string
+  cause?: Error
 }
 
-// Client errors (400 series)
-export class MissingClientIdError extends AuthError {
-	constructor() {
-		super('Invalid request: clientId is missing', 400)
-	}
+const ERROR_DEFS: Record<AuthErrorKind, { status: number; message: string }> = {
+  MissingClientId: { status: 400, message: 'Invalid request: clientId is missing' },
+  MissingState: { status: 400, message: 'Invalid request: state.oauthReqInfo is missing' },
+  MissingParameters: { status: 400, message: 'Missing required parameters' },
+  InvalidState: { status: 400, message: 'Invalid state: clientId is missing' },
+  CookieDecode: { status: 400, message: 'Could not decode state' },
+  InvalidCookieFormat: { status: 400, message: 'Invalid cookie format received' },
+  InvalidRequestMethod: { status: 400, message: 'Invalid request method. Expected POST.' },
+  MissingFormState: { status: 400, message: "Missing or invalid 'state' in form data." },
+  ClientIdExtraction: { status: 400, message: 'Could not extract clientId from state object.' },
+  CookieSignature: { status: 401, message: 'Cookie signature verification failed' },
+  AuthRequest: { status: 500, message: 'Error processing authorization request' },
+  AuthApproval: { status: 500, message: 'Error processing approval' },
+  AuthCallback: { status: 500, message: 'Authorization failed during callback processing' },
+  AuthUrl: { status: 500, message: 'Error creating authorization URL' },
+  NoUserId: { status: 500, message: 'Failed to retrieve user information after Schwab auth' },
+  TokenExchange: { status: 500, message: 'Failed to exchange Schwab authorization code for tokens' },
+  ApiResponse: { status: 500, message: 'Schwab API request failed during authorization flow' },
+  CookieSecretMissing: {
+    status: 500,
+    message: 'COOKIE_SECRET is not defined. A secret key is required for signing cookies.',
+  },
 }
 
-export class MissingStateError extends AuthError {
-	constructor() {
-		super('Invalid request: state.oauthReqInfo is missing', 400)
-	}
+export function createAuthError(kind: AuthErrorKind, cause?: Error): AuthError {
+  const def = ERROR_DEFS[kind]
+  return { kind, status: def.status, message: def.message, ...(cause ? { cause } : {}) }
 }
 
-export class MissingParametersError extends AuthError {
-	constructor() {
-		super('Missing required parameters', 400)
-	}
-}
-
-export class InvalidStateError extends AuthError {
-	constructor() {
-		super('Invalid state: clientId is missing', 400)
-	}
-}
-
-export class CookieDecodeError extends AuthError {
-	constructor() {
-		super('Could not decode state', 400)
-	}
-}
-
-export class InvalidCookieFormatError extends AuthError {
-	constructor() {
-		super('Invalid cookie format received', 400)
-	}
-}
-
-export class InvalidRequestMethodError extends AuthError {
-	constructor() {
-		super('Invalid request method. Expected POST.', 400)
-	}
-}
-
-export class MissingFormStateError extends AuthError {
-	constructor() {
-		super("Missing or invalid 'state' in form data.", 400)
-	}
-}
-
-export class ClientIdExtractionError extends AuthError {
-	constructor() {
-		super('Could not extract clientId from state object.', 400)
-	}
-}
-
-// Unauthorized errors (401)
-export class CookieSignatureError extends AuthError {
-	constructor() {
-		super('Cookie signature verification failed', 401)
-	}
-}
-
-// Server errors (500 series)
-export class AuthRequestError extends AuthError {
-	constructor() {
-		super('Error processing authorization request', 500)
-	}
-}
-
-export class AuthApprovalError extends AuthError {
-	constructor() {
-		super('Error processing approval', 500)
-	}
-}
-
-export class AuthCallbackError extends AuthError {
-	constructor() {
-		super('Authorization failed during callback processing', 500)
-	}
-}
-
-export class AuthUrlError extends AuthError {
-	constructor() {
-		super('Error creating authorization URL', 500)
-	}
-}
-
-export class NoUserIdError extends AuthError {
-	constructor() {
-		super('Failed to retrieve user information after Schwab auth', 500)
-	}
-}
-
-export class TokenExchangeError extends AuthError {
-	constructor() {
-		super('Failed to exchange Schwab authorization code for tokens', 500)
-	}
-}
-
-export class ApiResponseError extends AuthError {
-	constructor() {
-		super('Schwab API request failed during authorization flow', 500)
-	}
-}
-
-export class CookieSecretMissingError extends AuthError {
-	constructor() {
-		super(
-			'COOKIE_SECRET is not defined. A secret key is required for signing cookies.',
-			500,
-		)
-	}
-}
-
-/**
- * Standardized JSON error response structure
- */
 export interface JsonErrorResponse {
-	code: string
-	message: string
-	requestId?: string
-	details?: Record<string, any>
+  code: string
+  message: string
+  requestId?: string
+  details?: Record<string, any>
 }
 
-/**
- * Formats an error response with appropriate logging
- * Now simplified to work with Error objects that have status property
- *
- * @param error The error object
- * @param details Optional additional details for debugging
- * @returns A standardized error response object
- */
 interface ErrorResponse {
-	message: string
-	status: number
-	details?: any
+  message: string
+  status: number
+  details?: any
 }
 
 export function formatAuthError(
-	error: Error & { status?: number },
-	details?: any,
+  error: AuthError,
+  details?: Record<string, any>,
 ): ErrorResponse {
-	return {
-		message: error.message,
-		status: error.status ?? 500,
-		details,
-	}
+  const includeStack = logger.getLevel() === LogLevel.DEBUG
+  let filtered = details
+  if (details && !includeStack) {
+    const { stack, ...rest } = details
+    filtered = rest
+  }
+  return { message: error.message, status: error.status, ...(filtered && { details: filtered }) }
 }
 
-/**
- * Creates a JSON error response for HTTP responses
- */
 export function createJsonErrorResponse(
-	error: AuthError,
-	requestId?: string,
-	additionalDetails?: Record<string, any>,
+  error: AuthError,
+  requestId?: string,
+  additionalDetails?: Record<string, any>,
 ): JsonErrorResponse {
-	return {
-		code: error.constructor.name,
-		message: error.message,
-		...(requestId && { requestId }),
-		...(additionalDetails && { details: additionalDetails }),
-	}
+  return {
+    code: error.kind,
+    message: error.message,
+    ...(requestId && { requestId }),
+    ...(additionalDetails && { details: additionalDetails }),
+  }
 }

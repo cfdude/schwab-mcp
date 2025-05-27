@@ -2,7 +2,7 @@ import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
 import { safeBase64Decode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
 import { logger } from '../shared/logger'
-import { ClientIdExtractionError } from './errors'
+import { createAuthError } from './errors'
 
 /**
  * IMPORTANT: EnhancedTokenManager State Handling
@@ -194,9 +194,9 @@ export async function decodeAndVerifyState(
 export function extractClientIdFromState(state: StateData): string {
 	const clientId = state.clientId || state.oauthReqInfo?.clientId
 
-	if (!clientId) {
-		throw new ClientIdExtractionError()
-	}
+        if (!clientId) {
+                throw createAuthError('ClientIdExtraction')
+        }
 
 	return clientId
 }
