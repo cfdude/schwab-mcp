@@ -1,5 +1,5 @@
 // Auth error definitions simplified using discriminated unions
-import { LogLevel, logger } from '../shared/logger'
+import { logger, LogLevel } from '../shared/logger'
 
 export type AuthErrorKind =
 	| 'MissingClientId'

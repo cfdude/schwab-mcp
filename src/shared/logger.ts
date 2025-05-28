@@ -3,7 +3,7 @@
  * Includes different log levels and ensures sensitive data is not logged
  */
 
-enum LogLevel {
+export enum LogLevel {
 	DEBUG = 0,
 	INFO = 1,
 	WARN = 2,
