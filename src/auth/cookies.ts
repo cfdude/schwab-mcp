@@ -1,14 +1,7 @@
 import { safeBase64Decode, safeBase64Encode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
 import { logger } from '../shared/logger'
-import {
-	CookieSecretMissingError,
-	InvalidCookieFormatError,
-	CookieSignatureError,
-	InvalidRequestMethodError,
-	MissingFormStateError,
-	InvalidStateError,
-} from './errors'
+import { createAuthError } from './errors'
 import {
 	decodeAndVerifyState,
 	extractClientIdFromState,
@@ -55,7 +48,7 @@ function fromHex(hexString: string): ArrayBuffer {
  */
 async function importKey(secret: string): Promise<CryptoKey> {
 	if (!secret) {
-		throw new CookieSecretMissingError()
+		throw createAuthError('CookieSecretMissing')
 	}
 	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
@@ -147,7 +140,7 @@ async function verifyAndDecodeCookie<T>(
 
 	const parts = cookieValue.split('.')
 	if (parts.length !== 2) {
-		const error = new InvalidCookieFormatError()
+		const error = createAuthError('InvalidCookieFormat')
 		logger.warn(error.message)
 		return undefined
 	}
@@ -181,7 +174,7 @@ async function verifyAndDecodeCookie<T>(
 	const isValid = await verifySignature(key, signatureHex, payloadString)
 
 	if (!isValid) {
-		const error = new CookieSignatureError()
+		const error = createAuthError('CookieSignature')
 		logger.warn(error.message)
 		return undefined
 	}
@@ -315,7 +308,7 @@ export async function parseRedirectApproval(
 ): Promise<ParsedApprovalResult> {
 	const cookieSecret = config.COOKIE_ENCRYPTION_KEY
 	if (request.method !== 'POST') {
-		throw new InvalidRequestMethodError()
+		throw createAuthError('InvalidRequestMethod')
 	}
 
 	let encodedState: string
@@ -327,13 +320,13 @@ export async function parseRedirectApproval(
 		const stateParam = formData.get('state')
 
 		if (typeof stateParam !== 'string' || !stateParam) {
-			throw new MissingFormStateError()
+			throw createAuthError('MissingFormState')
 		}
 
 		encodedState = stateParam
 		const decodedState = await decodeAndVerifyState(config, encodedState)
 		if (!decodedState) {
-			throw new InvalidStateError()
+			throw createAuthError('InvalidState')
 		}
 		state = decodedState
 		clientId = extractClientIdFromState(state)
