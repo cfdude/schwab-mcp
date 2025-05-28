@@ -11,7 +11,7 @@ interface ErrorMapping {
  * Maps Schwab SDK error codes to MCP error classes and metadata
  * This replaces the large switch statement with a cleaner lookup table
  */
-export const schwabErrorMap: Record<SchwabSDKAuthErrorCode, ErrorMapping> = {
+const schwabErrorMap: Record<SchwabSDKAuthErrorCode, ErrorMapping> = {
 	[SchwabSDKAuthErrorCode.INVALID_CODE]: {
 		mcpError: () => createAuthError('TokenExchange'),
 		message: (msg) =>

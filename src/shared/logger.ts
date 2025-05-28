@@ -3,7 +3,7 @@
  * Includes different log levels and ensures sensitive data is not logged
  */
 
-export enum LogLevel {
+enum LogLevel {
 	DEBUG = 0,
 	INFO = 1,
 	WARN = 2,
@@ -15,7 +15,7 @@ export enum LogLevel {
 let currentLogLevel = LogLevel.INFO
 
 // Configurable regex patterns for masking secrets
-export interface SecretPattern {
+interface SecretPattern {
 	pattern: RegExp
 	replacement: string
 }
@@ -25,7 +25,7 @@ const DEFAULT_SECRET_PATTERNS: SecretPattern[] = [
 	// Bearer tokens
 	{
 		pattern:
-			/Bearer\s+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_.+/=]*/g,
+			/Bearer\s+[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_=]+\.[A-Za-z0-9\-_\.\+\/=]*/g,
 		replacement: 'Bearer [REDACTED]',
 	},
 	// Basic auth
@@ -35,12 +35,12 @@ const DEFAULT_SECRET_PATTERNS: SecretPattern[] = [
 	},
 	// Access tokens in JSON-like strings
 	{
-		pattern: /accessToken["']?\s*:\s*["']?[^"',}]*["']?/g,
+		pattern: /accessToken["']?\s*:\s*["']?[A-Za-z0-9\-_\.\+\/=]+["']?/g,
 		replacement: 'accessToken: "[REDACTED]"',
 	},
 	// Refresh tokens in JSON-like strings
 	{
-		pattern: /refreshToken["']?\s*:\s*["']?[^"',}]*["']?/g,
+		pattern: /refreshToken["']?\s*:\s*["']?[A-Za-z0-9\-_\.\+\/=]+["']?/g,
 		replacement: 'refreshToken: "[REDACTED]"',
 	},
 	// API keys
