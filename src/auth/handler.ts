@@ -13,10 +13,10 @@ import { initializeSchwabAuthClient, redirectToSchwab } from './client'
 import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
 import { mapSchwabError } from './errorMapping'
 import {
-        createAuthError,
-        type AuthError,
-        formatAuthError,
-        createJsonErrorResponse,
+	createAuthError,
+	type AuthError,
+	formatAuthError,
+	createJsonErrorResponse,
 } from './errors'
 import { decodeAndVerifyState, extractClientIdFromState } from './stateUtils'
 import { renderApprovalDialog } from './ui'
@@ -39,13 +39,13 @@ app.get('/authorize', async (c) => {
 		const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw)
 		const { clientId } = oauthReqInfo
 
-                if (!clientId) {
-                        const error = createAuthError('MissingClientId')
-                        const errorInfo = formatAuthError(error)
-                        logger.error(errorInfo.message)
-                        const jsonResponse = createJsonErrorResponse(error)
-                        return c.json(jsonResponse, errorInfo.status as any)
-                }
+		if (!clientId) {
+			const error = createAuthError('MissingClientId')
+			const errorInfo = formatAuthError(error)
+			logger.error(errorInfo.message)
+			const jsonResponse = createJsonErrorResponse(error)
+			return c.json(jsonResponse, errorInfo.status as any)
+		}
 
 		// If client ID is already approved, redirect directly to Schwab
 		if (
@@ -68,12 +68,12 @@ app.get('/authorize', async (c) => {
 			},
 			state: { oauthReqInfo },
 		})
-        } catch (error) {
-                const authError = createAuthError('AuthRequest')
-                const errorInfo = formatAuthError(authError, { error })
-                logger.error(errorInfo.message, { error })
-                const jsonResponse = createJsonErrorResponse(authError)
-                return c.json(jsonResponse, errorInfo.status as any)
+	} catch (error) {
+		const authError = createAuthError('AuthRequest')
+		const errorInfo = formatAuthError(authError, { error })
+		logger.error(errorInfo.message, { error })
+		const jsonResponse = createJsonErrorResponse(authError)
+		return c.json(jsonResponse, errorInfo.status as any)
 	}
 })
 
@@ -88,25 +88,25 @@ app.post('/authorize', async (c) => {
 		const config = buildConfig(c.env)
 		const { state, headers } = await parseRedirectApproval(c.req.raw, config)
 
-                if (!state.oauthReqInfo) {
-                        const error = createAuthError('MissingState')
-                        const errorInfo = formatAuthError(error)
-                        logger.error(errorInfo.message)
-                        const jsonResponse = createJsonErrorResponse(error)
-                        return c.json(jsonResponse, errorInfo.status as any)
-                }
+		if (!state.oauthReqInfo) {
+			const error = createAuthError('MissingState')
+			const errorInfo = formatAuthError(error)
+			logger.error(errorInfo.message)
+			const jsonResponse = createJsonErrorResponse(error)
+			return c.json(jsonResponse, errorInfo.status as any)
+		}
 
 		// Pass the actual AuthRequest object to redirectToSchwab
 		const authRequestForSchwab = state.oauthReqInfo
 
 		// Validate required AuthRequest fields before passing to redirectToSchwab
-                if (!authRequestForSchwab?.clientId || !authRequestForSchwab?.scope) {
-                        const error = createAuthError('InvalidState')
-                        const errorInfo = formatAuthError(error, {
-                                missingFields: {
-                                        clientId: !authRequestForSchwab?.clientId,
-                                        scope: !authRequestForSchwab?.scope,
-                                },
+		if (!authRequestForSchwab?.clientId || !authRequestForSchwab?.scope) {
+			const error = createAuthError('InvalidState')
+			const errorInfo = formatAuthError(error, {
+				missingFields: {
+					clientId: !authRequestForSchwab?.clientId,
+					scope: !authRequestForSchwab?.scope,
+				},
 			})
 			logger.error(errorInfo.message, errorInfo.details)
 			const jsonResponse = createJsonErrorResponse(
@@ -118,13 +118,13 @@ app.post('/authorize', async (c) => {
 		}
 
 		return redirectToSchwab(c, config, authRequestForSchwab, headers)
-        } catch (error) {
-                const authError = createAuthError('AuthApproval')
-                const errorInfo = formatAuthError(authError, { error })
-                logger.error(errorInfo.message, { error })
-                const jsonResponse = createJsonErrorResponse(authError)
-                return c.json(jsonResponse, errorInfo.status as any)
-        }
+	} catch (error) {
+		const authError = createAuthError('AuthApproval')
+		const errorInfo = formatAuthError(authError, { error })
+		logger.error(errorInfo.message, { error })
+		const jsonResponse = createJsonErrorResponse(authError)
+		return c.json(jsonResponse, errorInfo.status as any)
+	}
 })
 
 /**
@@ -141,12 +141,12 @@ app.get('/callback', async (c) => {
 		const stateParam = c.req.query('state')
 		const code = c.req.query('code')
 
-                if (!stateParam || !code) {
-                        const error = createAuthError('MissingParameters')
-                        const errorInfo = formatAuthError(error, {
-                                hasState: !!stateParam,
-                                hasCode: !!code,
-                        })
+		if (!stateParam || !code) {
+			const error = createAuthError('MissingParameters')
+			const errorInfo = formatAuthError(error, {
+				hasState: !!stateParam,
+				hasCode: !!code,
+			})
 			logger.error(errorInfo.message, errorInfo.details)
 			const jsonResponse = createJsonErrorResponse(
 				error,
@@ -162,13 +162,13 @@ app.get('/callback', async (c) => {
 			config,
 			stateParam,
 		)
-                if (!decodedStateAsAuthRequest) {
-                        const error = createAuthError('InvalidState')
-                        const errorInfo = formatAuthError(error)
-                        logger.error(errorInfo.message)
-                        const jsonResponse = createJsonErrorResponse(error)
-                        return c.json(jsonResponse, errorInfo.status as any)
-                }
+		if (!decodedStateAsAuthRequest) {
+			const error = createAuthError('InvalidState')
+			const errorInfo = formatAuthError(error)
+			logger.error(errorInfo.message)
+			const jsonResponse = createJsonErrorResponse(error)
+			return c.json(jsonResponse, errorInfo.status as any)
+		}
 
 		// `extractClientIdFromState` will correctly get `decodedStateAsAuthRequest.clientId`.
 		// This also serves as validation that clientId exists within the decoded state.
@@ -177,17 +177,17 @@ app.get('/callback', async (c) => {
 		)
 
 		// Validate required AuthRequest fields directly on `decodedStateAsAuthRequest`
-                if (
-                        !decodedStateAsAuthRequest?.clientId || // Should be redundant due to extractClientIdFromState
-                        !decodedStateAsAuthRequest?.redirectUri ||
-                        !decodedStateAsAuthRequest?.scope
-                ) {
-                        const error = createAuthError('InvalidState')
-                        const errorInfo = formatAuthError(error, {
-                                detail:
-                                        'Decoded state object from Schwab callback is missing required AuthRequest fields (clientId, redirectUri, or scope).',
-                                decodedState: decodedStateAsAuthRequest, // Log the problematic state
-                        })
+		if (
+			!decodedStateAsAuthRequest?.clientId || // Should be redundant due to extractClientIdFromState
+			!decodedStateAsAuthRequest?.redirectUri ||
+			!decodedStateAsAuthRequest?.scope
+		) {
+			const error = createAuthError('InvalidState')
+			const errorInfo = formatAuthError(error, {
+				detail:
+					'Decoded state object from Schwab callback is missing required AuthRequest fields (clientId, redirectUri, or scope).',
+				decodedState: decodedStateAsAuthRequest, // Log the problematic state
+			})
 			logger.error(errorInfo.message, errorInfo.details)
 			const jsonResponse = createJsonErrorResponse(
 				error,
@@ -238,7 +238,7 @@ app.get('/callback', async (c) => {
 						? exchangeError.message
 						: String(exchangeError),
 			})
-                        throw createAuthError('TokenExchange')
+			throw createAuthError('TokenExchange')
 		}
 
 		// Log token information (without sensitive details)
@@ -268,7 +268,7 @@ app.get('/callback', async (c) => {
 						? clientError.message
 						: String(clientError),
 			})
-                        throw createAuthError('AuthCallback')
+			throw createAuthError('AuthCallback')
 		}
 
 		// Fetch user info to get the Schwab user ID
@@ -284,7 +284,7 @@ app.get('/callback', async (c) => {
 						? preferencesError.message
 						: String(preferencesError),
 			})
-                        throw createAuthError('NoUserId')
+			throw createAuthError('NoUserId')
 		}
 
 		logger.debug('User preferences response', {
@@ -296,9 +296,9 @@ app.get('/callback', async (c) => {
 		const userIdFromSchwab =
 			userPreferences?.streamerInfo?.[0]?.schwabClientCorrelId
 
-                if (!userIdFromSchwab) {
-                        const error = createAuthError('NoUserId')
-                        const errorInfo = formatAuthError(error)
+		if (!userIdFromSchwab) {
+			const error = createAuthError('NoUserId')
+			const errorInfo = formatAuthError(error)
 			logger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(error)
 			return c.json(jsonResponse, errorInfo.status as any)
@@ -323,7 +323,7 @@ app.get('/callback', async (c) => {
 		const isSchwabAuthError = error instanceof SchwabAuthError
 		const isSchwabApiErrorInstance = error instanceof SchwabApiError
 
-                let mcpError: AuthError = createAuthError('AuthCallback') // Default MCP error for this handler
+		let mcpError: AuthError = createAuthError('AuthCallback') // Default MCP error for this handler
 		let detailMessage = error instanceof Error ? error.message : String(error)
 		let httpStatus = 500 // Default HTTP status
 		let requestId: string | undefined
@@ -344,8 +344,8 @@ app.get('/callback', async (c) => {
 				requestId = (schwabAuthErr as any).getRequestId()
 			}
 		} else if (isSchwabApiErrorInstance) {
-                        const schwabApiErr = error as SchwabApiError
-                        mcpError = createAuthError('ApiResponse')
+			const schwabApiErr = error as SchwabApiError
+			mcpError = createAuthError('ApiResponse')
 			detailMessage = `API request failed during authorization: ${schwabApiErr.message}`
 			httpStatus = schwabApiErr.status || 500
 

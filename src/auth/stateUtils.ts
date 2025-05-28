@@ -194,9 +194,9 @@ export async function decodeAndVerifyState(
 export function extractClientIdFromState(state: StateData): string {
 	const clientId = state.clientId || state.oauthReqInfo?.clientId
 
-        if (!clientId) {
-                throw createAuthError('ClientIdExtraction')
-        }
+	if (!clientId) {
+		throw createAuthError('ClientIdExtraction')
+	}
 
 	return clientId
 }

@@ -47,9 +47,9 @@ function fromHex(hexString: string): ArrayBuffer {
  * @returns A promise resolving to the CryptoKey object.
  */
 async function importKey(secret: string): Promise<CryptoKey> {
-        if (!secret) {
-                throw createAuthError('CookieSecretMissing')
-        }
+	if (!secret) {
+		throw createAuthError('CookieSecretMissing')
+	}
 	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
 	return crypto.subtle.importKey(
@@ -138,12 +138,12 @@ async function verifyAndDecodeCookie<T>(
 ): Promise<T | undefined> {
 	if (!cookieValue) return undefined
 
-        const parts = cookieValue.split('.')
-        if (parts.length !== 2) {
-                const error = createAuthError('InvalidCookieFormat')
-                logger.warn(error.message)
-                return undefined
-        }
+	const parts = cookieValue.split('.')
+	if (parts.length !== 2) {
+		const error = createAuthError('InvalidCookieFormat')
+		logger.warn(error.message)
+		return undefined
+	}
 
 	// TypeScript doesn't know that we've already checked parts.length === 2
 	// so we need to assert the types manually
@@ -173,11 +173,11 @@ async function verifyAndDecodeCookie<T>(
 	}
 	const isValid = await verifySignature(key, signatureHex, payloadString)
 
-        if (!isValid) {
-                const error = createAuthError('CookieSignature')
-                logger.warn(error.message)
-                return undefined
-        }
+	if (!isValid) {
+		const error = createAuthError('CookieSignature')
+		logger.warn(error.message)
+		return undefined
+	}
 
 	// Step 3: Parse JSON only after signature validation
 	try {
@@ -306,10 +306,10 @@ export async function parseRedirectApproval(
 	request: Request,
 	config: ValidatedEnv,
 ): Promise<ParsedApprovalResult> {
-        const cookieSecret = config.COOKIE_ENCRYPTION_KEY
-        if (request.method !== 'POST') {
-                throw createAuthError('InvalidRequestMethod')
-        }
+	const cookieSecret = config.COOKIE_ENCRYPTION_KEY
+	if (request.method !== 'POST') {
+		throw createAuthError('InvalidRequestMethod')
+	}
 
 	let encodedState: string
 	let state: StateData
@@ -319,15 +319,15 @@ export async function parseRedirectApproval(
 		const formData = await request.formData()
 		const stateParam = formData.get('state')
 
-                if (typeof stateParam !== 'string' || !stateParam) {
-                        throw createAuthError('MissingFormState')
-                }
+		if (typeof stateParam !== 'string' || !stateParam) {
+			throw createAuthError('MissingFormState')
+		}
 
 		encodedState = stateParam
-                const decodedState = await decodeAndVerifyState(config, encodedState)
-                if (!decodedState) {
-                        throw createAuthError('InvalidState')
-                }
+		const decodedState = await decodeAndVerifyState(config, encodedState)
+		if (!decodedState) {
+			throw createAuthError('InvalidState')
+		}
 		state = decodedState
 		clientId = extractClientIdFromState(state)
 	} catch (e) {

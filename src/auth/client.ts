@@ -139,10 +139,10 @@ export async function redirectToSchwab(
 		} else {
 			return Response.redirect(authUrl, 302)
 		}
-        } catch (error) {
-                const authError = createAuthError('AuthUrl')
-                const errorInfo = formatAuthError(authError, { error })
-                logger.error(errorInfo.message, { error })
-                return new Response(errorInfo.message, { status: errorInfo.status })
-        }
+	} catch (error) {
+		const authError = createAuthError('AuthUrl')
+		const errorInfo = formatAuthError(authError, { error })
+		logger.error(errorInfo.message, { error })
+		return new Response(errorInfo.message, { status: errorInfo.status })
+	}
 }
