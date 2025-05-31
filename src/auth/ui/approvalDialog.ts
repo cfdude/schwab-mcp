@@ -1,6 +1,7 @@
 import { type ClientInfo } from '@cloudflare/workers-oauth-provider'
+import { type ValidatedEnv } from '../../../types/env'
 import { logger } from '../../shared/logger'
-import { defaultRedirectValidator } from '../redirectValidator'
+import { createRedirectValidator } from '../redirectValidator'
 import { createApprovalDialogHTML } from './templates'
 
 /**
@@ -24,6 +25,10 @@ interface ApprovalDialogOptions {
 	 * Will be encoded in the form and returned when approval is complete
 	 */
 	state: Record<string, any>
+	/**
+	 * Validated environment configuration for redirect validation
+	 */
+	config: ValidatedEnv
 }
 
 /**
@@ -53,7 +58,7 @@ export function renderApprovalDialog(
 	request: Request,
 	options: ApprovalDialogOptions,
 ): Response {
-	const { client, server, state } = options
+	const { client, server, state, config } = options
 
 	// Encode state for form submission
 	const encodedState = btoa(JSON.stringify(state))
@@ -62,8 +67,11 @@ export function renderApprovalDialog(
 	let redirectUris: string[] = []
 	let warnAboutUntrustedClient = false
 	if (client?.redirectUris && client.redirectUris.length > 0) {
+		// Create validator with environment-configurable patterns
+		const redirectValidator = createRedirectValidator(config)
+
 		// Validate each redirect URI against the allowlist
-		const validUris = defaultRedirectValidator.filterValidRedirectUris(
+		const validUris = redirectValidator.filterValidRedirectUris(
 			client.redirectUris,
 		)
 
@@ -102,6 +110,7 @@ export function renderApprovalDialog(
 	return new Response(htmlContent, {
 		headers: {
 			'Content-Type': 'text/html; charset=utf-8',
+			'Content-Security-Policy': "default-src 'self'; img-src https: data:;",
 		},
 	})
 }

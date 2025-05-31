@@ -13,12 +13,12 @@ import {
 	scrubAccountIdentifiers,
 } from '../../shared/accountScrubber'
 import { logger } from '../../shared/logger'
-import { createTool, toolError, toolSuccess } from '../../shared/toolBuilder'
+import { asTyped, createTool, toolError, toolSuccess } from '../../shared/toolBuilder'
 
 interface ToolSpec<S extends z.ZodSchema> {
 	name: string
 	schema: S
-	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<any>
+	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<unknown>
 }
 
 const TRADER_TOOLS = [
@@ -33,7 +33,7 @@ const TRADER_TOOLS = [
 			const accounts = await c.trader.accounts.getAccounts({
 				queryParams: { fields: p?.fields },
 			})
-			const accountSummaries = accounts.map((acc: any) => ({
+			const accountSummaries = accounts.map((acc: { securitiesAccount: Record<string, unknown> }) => ({
 				...acc.securitiesAccount,
 			}))
 			return scrubAccountIdentifiers(accountSummaries, displayMap)
@@ -111,7 +111,7 @@ const TRADER_TOOLS = [
 				hasTypes: !!p.types,
 				symbol: p.symbol,
 			})
-			const transactions: any[] = []
+			const transactions: unknown[] = []
 			for (const account of accounts) {
 				const accountTransactions = await c.trader.transactions.getTransactions(
 					{
@@ -150,7 +150,7 @@ const TRADER_TOOLS = [
 			return scrubAccountIdentifiers(userPreference, displayMap)
 		},
 	},
-] as const satisfies readonly ToolSpec<any>[]
+] as const satisfies readonly ToolSpec<z.ZodSchema>[]
 
 export function registerTraderTools(
 	client: SchwabApiClient,
@@ -162,7 +162,7 @@ export function registerTraderTools(
 			schema: spec.schema,
 			handler: async (params, c) => {
 				try {
-					const data = await spec.call(c, params as any)
+					const data = await spec.call(c, asTyped(params, spec.schema))
 					return toolSuccess({
 						data,
 						source: spec.name,

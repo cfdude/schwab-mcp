@@ -1,3 +1,4 @@
+import { type ValidatedEnv } from '../../types/env'
 import { logger } from '../shared/logger'
 
 /**
@@ -80,6 +81,25 @@ const DEFAULT_REDIRECT_PATTERNS = [
 
 	// Add more patterns as needed for trusted MCP clients
 ]
+
+/**
+ * Creates a redirect validator with configurable patterns from environment
+ */
+export function createRedirectValidator(
+	config: ValidatedEnv,
+): RedirectValidator {
+	const patterns = [...DEFAULT_REDIRECT_PATTERNS]
+
+	if (config.ALLOWED_REDIRECT_REGEXPS) {
+		const additionalPatterns = config.ALLOWED_REDIRECT_REGEXPS.split(',')
+			.map((pattern) => pattern.trim())
+			.filter((pattern) => pattern.length > 0)
+
+		patterns.push(...additionalPatterns)
+	}
+
+	return new RedirectValidator(patterns)
+}
 
 // Create a default validator instance
 export const defaultRedirectValidator = new RedirectValidator(

@@ -1,12 +1,15 @@
 import { safeBase64Decode, safeBase64Encode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
-import { logger } from '../shared/logger'
+import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
 import { createAuthError } from './errors'
 import {
 	decodeAndVerifyState,
 	extractClientIdFromState,
 	type StateData,
 } from './stateUtils'
+
+// Create scoped logger for cookie operations
+const logger = makeLogger(AppLogLevel.INFO).withContext('cookies')
 
 const MCP_APPROVAL = 'mcp-approved-clients'
 const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365

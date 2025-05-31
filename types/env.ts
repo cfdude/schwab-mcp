@@ -36,6 +36,11 @@ export interface Env {
 	 * Optional log level for application logging
 	 */
 	LOG_LEVEL?: string
+
+	/**
+	 * Optional comma-separated list of additional redirect URI regex patterns
+	 */
+	ALLOWED_REDIRECT_REGEXPS?: string
 }
 
 /**
@@ -73,4 +78,10 @@ export interface ValidatedEnv {
 	 * Optional log level for application logging
 	 */
 	readonly LOG_LEVEL?: string
+
+	/**
+	 * Optional comma-separated list of additional redirect URI regex patterns
+	 */
+	readonly ALLOWED_REDIRECT_REGEXPS?: string
 }
+

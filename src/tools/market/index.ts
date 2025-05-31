@@ -9,12 +9,12 @@ import {
 	GetPriceHistoryRequestQueryParamsSchema,
 } from '@sudowealth/schwab-api'
 import type * as z from 'zod'
-import { createTool, toolError, toolSuccess } from '../../shared/toolBuilder'
+import { asTyped, createTool, toolError, toolSuccess } from '../../shared/toolBuilder'
 
-interface ToolSpec<S extends z.ZodSchema<any, any>> {
+interface ToolSpec<S extends z.ZodSchema> {
 	name: string
 	schema: S
-	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<any>
+	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<unknown>
 }
 
 const MARKET_TOOLS = [
@@ -87,7 +87,7 @@ const MARKET_TOOLS = [
 				},
 			}),
 	},
-] as const satisfies readonly ToolSpec<any>[]
+] as const satisfies readonly ToolSpec<z.ZodSchema>[]
 
 export function registerMarketTools(
 	client: SchwabApiClient,
@@ -99,7 +99,7 @@ export function registerMarketTools(
 			schema: spec.schema,
 			handler: async (params, c) => {
 				try {
-					const data = await spec.call(c, params as any)
+					const data = await spec.call(c, asTyped(params, spec.schema))
 					return toolSuccess({
 						data,
 						source: spec.name,

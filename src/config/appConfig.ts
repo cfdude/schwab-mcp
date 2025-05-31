@@ -37,6 +37,11 @@ const envSchema = z.object({
 		.enum(['debug', 'info', 'warn', 'error'])
 		.optional()
 		.default('info'),
+
+	ALLOWED_REDIRECT_REGEXPS: z
+		.string()
+		.optional()
+		.default(''),
 })
 
 export function buildConfig(env: Env): ValidatedEnv {

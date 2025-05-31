@@ -1,6 +1,6 @@
 import { type TokenData } from '@sudowealth/schwab-api'
 import { TOKEN_KEY_PREFIX } from './constants'
-import { logger } from './logger'
+import { makeLogger, LogLevel as AppLogLevel } from './logger'
 
 /**
  * Token identifiers for KV key generation
@@ -31,6 +31,8 @@ export interface KvTokenStore {
  */
 export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 	const TTL_31_DAYS = 31 * 24 * 60 * 60
+	// Create a scoped logger for token store operations
+	const logger = makeLogger(AppLogLevel.DEBUG).withContext('token-store')
 
 	/**
 	 * Generate consistent KV key from token identifiers
