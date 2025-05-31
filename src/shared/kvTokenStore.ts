@@ -1,4 +1,5 @@
 import { type TokenData } from '@sudowealth/schwab-api'
+import { TOKEN_KEY_PREFIX } from './constants'
 import { logger } from './logger'
 
 /**
@@ -36,7 +37,7 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 	 * Priority: schwabUserId > clientId
 	 */
 	const kvKey = (ids: TokenIdentifiers): string => {
-		const key = `token:${ids.schwabUserId ?? ids.clientId}`
+		const key = `${TOKEN_KEY_PREFIX}${ids.schwabUserId ?? ids.clientId}`
 		if (!ids.schwabUserId && !ids.clientId) {
 			throw new Error(
 				'Token identifiers must include either schwabUserId or clientId',
@@ -58,7 +59,7 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 
 			// If not found and we have both IDs, try the fallback key
 			if (!raw && ids.schwabUserId && ids.clientId) {
-				const fallbackKey = `token:${ids.clientId}`
+				const fallbackKey = `${TOKEN_KEY_PREFIX}${ids.clientId}`
 				raw = await kv.get(fallbackKey)
 				if (raw) {
 					usedKey = fallbackKey
@@ -74,7 +75,7 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 					primaryKey,
 					fallbackKey:
 						ids.schwabUserId && ids.clientId
-							? `token:${ids.clientId}`
+							? `${TOKEN_KEY_PREFIX}${ids.clientId}`
 							: undefined,
 				})
 				return null

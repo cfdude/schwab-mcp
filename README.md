@@ -1,14 +1,17 @@
 # Schwab MCP Server
 
-This MCP server enables AI assistants like Claude to retrieve and interact with
-your Schwab accounts and Schwab's market data. For example, you can ask Claude
-to:
+A Model Context Protocol (MCP) server that enables AI assistants like Claude to securely interact with Charles Schwab accounts and market data through the official Schwab API.
 
-- "Show me my Schwab account balances"
-- "Get a quote for AAPL"
+## What You Can Do
+
+Ask Claude to:
+- "Show me my Schwab account balances and positions"
+- "Get real-time quotes for AAPL, GOOGL, and MSFT"
 - "What are today's market movers in the $SPX?"
-- "Show me the options chain for TSLA"
-- "Get my recent transactions from the last week"
+- "Show me the options chain for TSLA with Greeks"
+- "Get my transactions from the last 30 days"
+- "Search for ETFs related to technology"
+- "Check if the markets are open"
 
 ## Unofficial MCP Server
 
@@ -35,45 +38,43 @@ providing:
 
 ## Features
 
-### Trading Tools
+### Trading Tools (7 tools)
 
 - **Account Management**
-  - `getAccounts`: Retrieve all account information with positions
+  - `getAccounts`: Retrieve all account information with positions and balances
   - `getAccountNumbers`: Get list of account identifiers
 - **Order Management**
-  - `getOrders`: Fetch orders with filtering options
+  - `getOrders`: Fetch orders with filtering by status, time range, and symbol
 - **Market Quotes**
   - `getQuotes`: Get real-time quotes for multiple symbols
-  - `getQuote`: Get detailed quote for a single symbol
+  - `getQuoteBySymbolId`: Get detailed quote for a single symbol
 - **Transaction History**
-  - `getTransactions`: Retrieve transaction history with date filtering
-  - `getTransaction`: Get details of a specific transaction
+  - `getTransactions`: Retrieve transaction history across all accounts with date filtering
+- **User Preferences**
+  - `getUserPreference`: Retrieve user trading preferences and settings
 
-### Market Data Tools
+### Market Data Tools (7 tools)
 
 - **Instrument Search**
-  - `searchInstruments`: Search for securities by symbol with projections
+  - `searchInstruments`: Search for securities by symbol with fundamental/reference data
 - **Price History**
-  - `getPriceHistory`: Get historical price data with customizable periods
+  - `getPriceHistory`: Get historical price data with customizable periods and frequencies
 - **Market Hours**
   - `getMarketHours`: Check market operating hours by date
-  - `getMarket`: Get specific market information
+  - `getMarketHoursByMarketId`: Get specific market information
 - **Market Movers**
-  - `getMovers`: Find top market movers by index
+  - `getMovers`: Find top market movers by index ($SPX, $COMPX, $DJI)
 - **Options Chains**
-  - `getOptionChain`: Retrieve options chain data with Greeks
-  - `getOptionExpiration`: Get option expiration dates
-
-### User Preferences
-
-- `getUserPreference`: Retrieve user trading preferences and settings
+  - `getOptionChain`: Retrieve full options chain data with Greeks
+  - `getOptionExpirationChain`: Get option expiration dates
 
 ## Prerequisites
 
 1. **Schwab Developer Account**: Register at
    [Schwab Developer Portal](https://developer.schwab.com)
-2. **Cloudflare Account**: For deployment (free tier available)
+2. **Cloudflare Account**: For deployment (Workers paid plan required for Durable Objects)
 3. **Node.js**: Version 22.x or higher
+4. **Wrangler CLI**: Installed via npm (included in dev dependencies)
 
 ## Getting Started
 
@@ -83,6 +84,9 @@ providing:
 git clone <repository-url>
 cd schwab-mcp
 npm install
+
+# Authenticate with Cloudflare (first time only)
+npx wrangler login
 ```
 
 ### Configuration
@@ -97,7 +101,30 @@ npm install
    - **App Type**: Personal or third-party based on your use case
 3. Note your **App Key** (Client ID) and generate an **App Secret**
 
-#### 2. Set Environment Variables
+#### 2. Set up KV Namespace
+
+```bash
+# Create the KV namespace for storing OAuth tokens
+npx wrangler kv:namespace create "OAUTH_KV"
+
+# This will output something like:
+# ✨ Successfully created KV namespace with ID: <your-namespace-id>
+```
+
+Update `wrangler.jsonc` with your generated KV namespace ID:
+
+```jsonc
+{
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      "id": "<your-namespace-id>" // Replace with your actual ID
+    }
+  ]
+}
+```
+
+#### 3. Set Environment Variables
 
 ```bash
 # Set production secrets via Wrangler
@@ -105,26 +132,27 @@ npx wrangler secret put SCHWAB_CLIENT_ID      # Your Schwab App Key
 npx wrangler secret put SCHWAB_CLIENT_SECRET  # Your Schwab App Secret
 npx wrangler secret put SCHWAB_REDIRECT_URI   # https://schwab-mcp.<your-subdomain>.workers.dev/callback
 npx wrangler secret put COOKIE_ENCRYPTION_KEY # Generate with: openssl rand -hex 32
+
+# Optional: Set log level (defaults to INFO)
+npx wrangler secret put LOG_LEVEL             # DEBUG, INFO, WARN, or ERROR
 ```
-
-#### 3. Set up KV Namespace
-
-```bash
-# Create the KV namespace for storing OAuth tokens
-npx wrangler kv:namespace create "OAUTH_KV"
-```
-
-Update `wrangler.jsonc` with the generated KV namespace ID.
 
 ### Deployment
 
 ```bash
 # Deploy to Cloudflare Workers
 npx wrangler deploy
+
+# The deployment will output your worker URL:
+# ✨ Successfully published your script to
+# https://schwab-mcp.<your-subdomain>.workers.dev
 ```
 
-Your MCP server will be available at
-`https://schwab-mcp.<your-subdomain>.workers.dev`
+Verify your deployment:
+```bash
+# Check the health endpoint
+curl https://schwab-mcp.<your-subdomain>.workers.dev/health
+```
 
 ### Testing with Inspector
 
@@ -186,24 +214,24 @@ Once connected, you can ask Claude to:
 
 ### Local Development
 
-For local development, create a `.dev.vars` file:
+For local development, create a `.dev.vars` file (automatically ignored by git):
 
 ```env
 SCHWAB_CLIENT_ID=your_development_app_key
 SCHWAB_CLIENT_SECRET=your_development_app_secret
 SCHWAB_REDIRECT_URI=http://localhost:8788/callback
-COOKIE_ENCRYPTION_KEY=your_random_key
+COOKIE_ENCRYPTION_KEY=your_random_key_here
+LOG_LEVEL=DEBUG  # Optional: Enable debug logging
 ```
 
 Run locally:
 
 ```bash
 npm run dev
-# or
-wrangler dev
+# Server will be available at http://localhost:8788
 ```
 
-Connect to `http://localhost:8788/sse` using the Inspector.
+Connect to `http://localhost:8788/sse` using the MCP Inspector for testing.
 
 ## Architecture
 
@@ -220,38 +248,55 @@ Connect to `http://localhost:8788/sse` using the Inspector.
 
 1. **OAuth 2.0 with PKCE**: Secure authentication flow preventing authorization
    code interception
-2. **Token Management**: Automatic token refresh with secure storage in KV
+2. **Enhanced Token Management**: 
+   - Centralized KV token store with automatic migration
+   - Automatic token refresh (5 minutes before expiration)
+   - 31-day token persistence with TTL
 3. **Account Scrubbing**: Sensitive account identifiers are automatically
    replaced with display names
-4. **Cookie Encryption**: Client approval state encrypted with AES-256
+4. **State Security**: HMAC-SHA256 signatures for state parameter integrity
+5. **Cookie Encryption**: Client approval state encrypted with AES-256
+6. **Secret Redaction**: Automatic masking of sensitive data in logs
 
 ## Development
 
 ### Available Scripts
 
 ```bash
-npm run dev        # Start development server
-npm run deploy     # Deploy to Cloudflare
+npm run dev        # Start development server on port 8788
+npm run deploy     # Deploy to Cloudflare Workers
 npm run typecheck  # Run TypeScript type checking
-npm run lint       # Run ESLint
+npm run lint       # Run ESLint with automatic fixes
 npm run format     # Format code with Prettier
-npm run validate   # Run typecheck and lint
+npm run validate   # Run typecheck and lint together
 ```
 
 ### Debugging
 
-The server includes comprehensive logging. View logs in:
+The server includes comprehensive logging with configurable levels:
 
-- **Development**: Terminal output
+- **Development**: Terminal output with colored logs
 - **Production**: Cloudflare dashboard → Workers → Logs
+- **Log Levels**: DEBUG, INFO, WARN, ERROR (set via LOG_LEVEL env var)
+
+Enable debug logging to see detailed OAuth flow and API interactions:
+```bash
+# For local development
+echo "LOG_LEVEL=DEBUG" >> .dev.vars
+
+# For production
+npx wrangler secret put LOG_LEVEL --secret="DEBUG"
+```
 
 ### Error Handling
 
-API errors are caught and formatted with helpful context:
+The server implements robust error handling with specific error types:
 
-- Authentication errors prompt for re-authentication
-- API errors include request IDs for troubleshooting
-- Network errors are retried automatically
+- **Authentication Errors (401)**: Prompt for re-authentication
+- **Client Errors (400)**: Invalid parameters, missing data
+- **Server Errors (500)**: API failures, configuration issues
+- **Network Errors (503)**: Automatic retry with backoff
+- All errors include request IDs for Schwab API troubleshooting
 
 ## Contributing
 
@@ -264,6 +309,35 @@ API errors are caught and formatted with helpful context:
 ## License
 
 MIT
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"KV namespace not found" error**
+   - Ensure you created the KV namespace and updated `wrangler.jsonc`
+   - Run `npx wrangler kv:namespace list` to verify
+
+2. **Authentication failures**
+   - Verify your redirect URI matches exactly in Schwab app settings
+   - Check that all secrets are set correctly with `npx wrangler secret list`
+   - Enable debug logging to see detailed OAuth flow
+
+3. **"Durable Objects not available" error**
+   - Ensure you have a paid Cloudflare Workers plan
+   - Durable Objects are not available on the free tier
+
+4. **Token refresh issues**
+   - The server automatically refreshes tokens 5 minutes before expiration
+   - Tokens are migrated from clientId to schwabUserId keys automatically
+   - Check KV namespace for stored tokens: `npx wrangler kv:key list --namespace-id=<your-id>`
+
+## Recent Updates
+
+- **Enhanced Token Management**: Centralized KV token store prevents token divergence
+- **Improved Security**: HMAC-SHA256 state validation and automatic secret redaction
+- **Better Error Handling**: Structured error types with Schwab API error mapping
+- **Configurable Logging**: Debug mode for troubleshooting OAuth and API issues
 
 ## Acknowledgments
 

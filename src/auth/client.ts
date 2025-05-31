@@ -15,6 +15,7 @@ import { type ValidatedEnv, type Env } from '../../types/env'
 import { logger } from '../shared/logger'
 import { createAuthError, formatAuthError } from './errors'
 import { encodeStateWithIntegrity } from './stateUtils'
+import { mapTokenPersistence } from './tokenPersistence'
 
 /**
  * Creates a Schwab Auth client with enhanced features
@@ -41,29 +42,7 @@ export function initializeSchwabAuthClient(
 	})
 
 	// Map our load/save functions to what EnhancedTokenManager expects
-	const mappedLoad = load
-		? async () => {
-				const mcpToken = await load()
-				if (!mcpToken) return null
-				return {
-					// Map to @sudowealth/schwab-api's TokenSet
-					accessToken: mcpToken.accessToken,
-					refreshToken: mcpToken.refreshToken,
-					expiresAt: mcpToken.expiresAt,
-				}
-			}
-		: undefined
-
-	const mappedSave = save
-		? async (apiTokenSet: TokenData) => {
-				await save({
-					// Map from @sudowealth/schwab-api's TokenData/TokenSet
-					accessToken: apiTokenSet.accessToken,
-					refreshToken: apiTokenSet.refreshToken || '', // ensure not undefined
-					expiresAt: apiTokenSet.expiresAt || 0, // ensure not undefined
-				})
-			}
-		: undefined
+	const { load: mappedLoad, save: mappedSave } = mapTokenPersistence(load, save)
 
 	// Build options for EnhancedTokenManager with MCP-specific defaults
 	const tokenManagerOptions: EnhancedTokenManagerOptions = {

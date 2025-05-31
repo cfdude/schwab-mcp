@@ -21,6 +21,16 @@ import { createAuthError } from './errors'
  */
 
 /**
+ * Interface for the state envelope structure
+ * This provides a symmetric format for encoding and decoding
+ */
+export interface StateEnvelope {
+	data: string      // base64 JSON
+	signature: string // base64 HMAC
+	version: 1        // bump when format changes
+}
+
+/**
  * Interface for structured state data
  */
 export interface StateData {
@@ -110,13 +120,14 @@ export async function encodeStateWithIntegrity(
 		config.COOKIE_ENCRYPTION_KEY,
 	)
 
-	// Combine state and signature
-	const signedState = JSON.stringify({
+	// Create state envelope
+	const envelope: StateEnvelope = {
 		data: stateBase64,
 		signature: signature,
-	})
+		version: 1,
+	}
 
-	return btoa(signedState)
+	return btoa(JSON.stringify(envelope))
 }
 
 /**
@@ -143,16 +154,13 @@ export async function decodeAndVerifyState(
 		// Try to decode as our signed state format first
 		try {
 			const signedStateJson = safeBase64Decode(decodedParam)
-			const signedState = JSON.parse(signedStateJson) as {
-				data?: string
-				signature?: string
-			}
+			const envelope = JSON.parse(signedStateJson) as Partial<StateEnvelope>
 
-			if (signedState.data && signedState.signature) {
+			if (envelope.data && envelope.signature && envelope.version === 1) {
 				// Verify HMAC signature
 				const isValid = await verifyHmacSignature(
-					signedState.data,
-					signedState.signature,
+					envelope.data,
+					envelope.signature,
 					config.COOKIE_ENCRYPTION_KEY,
 				)
 
@@ -162,7 +170,7 @@ export async function decodeAndVerifyState(
 				}
 
 				// Decode the verified state data
-				const stateJson = safeBase64Decode(signedState.data)
+				const stateJson = safeBase64Decode(envelope.data)
 				return JSON.parse(stateJson) as AuthRequest
 			}
 		} catch {
