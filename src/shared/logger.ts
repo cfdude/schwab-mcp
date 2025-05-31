@@ -71,18 +71,30 @@ interface LoggerState {
 }
 
 // Logger options for configuration
-export interface LoggerOpts {
+interface LoggerOpts {
 	secretPatterns?: SecretPattern[]
 	redactKeys?: string[]
 }
 
 // Logger interface
-export interface Logger {
+interface Logger {
 	debug: (message: string, data?: any, contextId?: string) => void
 	info: (message: string, data?: any, contextId?: string) => void
 	warn: (message: string, data?: any, contextId?: string) => void
 	error: (message: string, data?: any, contextId?: string) => void
-	withContext: (contextId: string) => Omit<Logger, 'withContext' | 'setLevel' | 'getLevel' | 'configureRedactKeys' | 'addRedactKeys' | 'configureSecretPatterns' | 'addSecretPatterns' | 'addSecretPattern'>
+	withContext: (
+		contextId: string,
+	) => Omit<
+		Logger,
+		| 'withContext'
+		| 'setLevel'
+		| 'getLevel'
+		| 'configureRedactKeys'
+		| 'addRedactKeys'
+		| 'configureSecretPatterns'
+		| 'addSecretPatterns'
+		| 'addSecretPattern'
+	>
 	setLevel: (level: LogLevel) => void
 	getLevel: () => LogLevel
 	configureRedactKeys: (keys: string[]) => void
@@ -94,12 +106,15 @@ export interface Logger {
 
 /**
  * Creates a logger instance with isolated state
- * 
+ *
  * @param level The log level for this logger instance
  * @param opts Optional configuration for secret patterns and redact keys
  * @returns A logger instance with isolated configuration
  */
-export function makeLogger(level: LogLevel, opts?: Partial<LoggerOpts>): Logger {
+export function makeLogger(
+	level: LogLevel,
+	opts?: Partial<LoggerOpts>,
+): Logger {
 	// Create isolated state for this logger instance
 	const state: LoggerState = {
 		currentLogLevel: level,
@@ -117,7 +132,10 @@ export function makeLogger(level: LogLevel, opts?: Partial<LoggerOpts>): Logger 
 	function sanitizeLogData(data: any, maxSize?: number): any {
 		if (typeof data === 'string') {
 			// Apply all secret patterns in a single pass
-			const allPatterns = [...DEFAULT_SECRET_PATTERNS, ...state.customSecretPatterns]
+			const allPatterns = [
+				...DEFAULT_SECRET_PATTERNS,
+				...state.customSecretPatterns,
+			]
 			let sanitizedString = data
 
 			for (const { pattern, replacement } of allPatterns) {
@@ -173,7 +191,12 @@ export function makeLogger(level: LogLevel, opts?: Partial<LoggerOpts>): Logger 
 	 * @param data Optional data to include with the log
 	 * @param contextId Optional correlation/context ID for tracing related logs
 	 */
-	function log(level: LogLevel, message: string, data?: any, contextId?: string) {
+	function log(
+		level: LogLevel,
+		message: string,
+		data?: any,
+		contextId?: string,
+	) {
 		if (level < state.currentLogLevel) return
 
 		// Apply size limits to prevent Cloudflare console overflow (16KB limit)
@@ -259,7 +282,10 @@ export function makeLogger(level: LogLevel, opts?: Partial<LoggerOpts>): Logger 
 		},
 
 		addSecretPattern: (pattern: RegExp, replacement: string) => {
-			state.customSecretPatterns = [...state.customSecretPatterns, { pattern, replacement }]
+			state.customSecretPatterns = [
+				...state.customSecretPatterns,
+				{ pattern, replacement },
+			]
 		},
 	}
 }

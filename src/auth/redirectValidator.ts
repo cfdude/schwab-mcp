@@ -100,8 +100,3 @@ export function createRedirectValidator(
 
 	return new RedirectValidator(patterns)
 }
-
-// Create a default validator instance
-export const defaultRedirectValidator = new RedirectValidator(
-	DEFAULT_REDIRECT_PATTERNS,
-)

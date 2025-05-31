@@ -1,6 +1,6 @@
-import { sanitizeHtml } from './approvalDialog';
+import { sanitizeHtml } from './approvalDialog'
 
-export const APPROVAL_CSS = /*css*/ `
+const APPROVAL_CSS = /*css*/ `
 /* Modern, responsive styling with system fonts */
 :root {
   --primary-color: #0070f3;
@@ -186,33 +186,41 @@ body {
     width: 100%;
   }
 }
-`;
+`
 
 interface ApprovalDialogTemplateParams {
-  client: {
-    clientId: string;
-    name: string;
-    website?: string;
-    logoUri?: string;
-    policyUri?: string;
-    tosUri?: string;
-    redirectUris?: string[];
-    contacts?: string[];
-  };
-  server: {
-    name: string;
-    logoUri?: string;
-    description?: string;
-  };
-  encodedState: string;
-  warnAboutUntrustedClient: boolean;
-  formActionPath: string;
+	client: {
+		clientId: string
+		name: string
+		website?: string
+		logoUri?: string
+		policyUri?: string
+		tosUri?: string
+		redirectUris?: string[]
+		contacts?: string[]
+	}
+	server: {
+		name: string
+		logoUri?: string
+		description?: string
+	}
+	encodedState: string
+	warnAboutUntrustedClient: boolean
+	formActionPath: string
 }
 
-export function createApprovalDialogHTML(params: ApprovalDialogTemplateParams): string {
-  const { client, server, encodedState, warnAboutUntrustedClient, formActionPath } = params;
-  
-  return /*html*/ `
+export function createApprovalDialogHTML(
+	params: ApprovalDialogTemplateParams,
+): string {
+	const {
+		client,
+		server,
+		encodedState,
+		warnAboutUntrustedClient,
+		formActionPath,
+	} = params
+
+	return /*html*/ `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -237,15 +245,15 @@ export function createApprovalDialogHTML(params: ApprovalDialogTemplateParams): 
           <h2 class="alert"><strong>${sanitizeHtml(client.name) || 'A new MCP Client'}</strong> is requesting access</h2>
           
           ${
-            warnAboutUntrustedClient
-              ? /*html*/ `
+						warnAboutUntrustedClient
+							? /*html*/ `
             <div class="warning">
               <span class="warning-icon">⚠️</span>
               <strong>Security Warning:</strong> Some redirect URIs provided by this client are not in the allowed list and have been filtered out for your security.
             </div>
           `
-              : ''
-          }
+							: ''
+					}
           
           <div class="client-info">
             <div class="client-detail">
@@ -256,8 +264,8 @@ export function createApprovalDialogHTML(params: ApprovalDialogTemplateParams): 
             </div>
             
             ${
-              client.website
-                ? /*html*/ `
+							client.website
+								? /*html*/ `
               <div class="client-detail">
                 <div class="detail-label">Website:</div>
                 <div class="detail-value small">
@@ -267,12 +275,12 @@ export function createApprovalDialogHTML(params: ApprovalDialogTemplateParams): 
                 </div>
               </div>
             `
-                : ''
-            }
+								: ''
+						}
             
             ${
-              client.policyUri
-                ? /*html*/ `
+							client.policyUri
+								? /*html*/ `
               <div class="client-detail">
                 <div class="detail-label">Privacy Policy:</div>
                 <div class="detail-value">
@@ -282,12 +290,12 @@ export function createApprovalDialogHTML(params: ApprovalDialogTemplateParams): 
                 </div>
               </div>
             `
-                : ''
-            }
+								: ''
+						}
             
             ${
-              client.tosUri
-                ? /*html*/ `
+							client.tosUri
+								? /*html*/ `
               <div class="client-detail">
                 <div class="detail-label">Terms of Service:</div>
                 <div class="detail-value">
@@ -297,12 +305,12 @@ export function createApprovalDialogHTML(params: ApprovalDialogTemplateParams): 
                 </div>
               </div>
             `
-                : ''
-            }
+								: ''
+						}
             
             ${
-              client.redirectUris && client.redirectUris.length > 0
-                ? /*html*/ `
+							client.redirectUris && client.redirectUris.length > 0
+								? /*html*/ `
               <div class="client-detail">
                 <div class="detail-label">Redirect URIs:</div>
                 <div class="detail-value small">
@@ -310,19 +318,19 @@ export function createApprovalDialogHTML(params: ApprovalDialogTemplateParams): 
                 </div>
               </div>
             `
-                : ''
-            }
+								: ''
+						}
             
             ${
-              client.contacts && client.contacts.length > 0
-                ? /*html*/ `
+							client.contacts && client.contacts.length > 0
+								? /*html*/ `
               <div class="client-detail">
                 <div class="detail-label">Contact:</div>
                 <div class="detail-value">${client.contacts.map((contact) => sanitizeHtml(contact)).join(', ')}</div>
               </div>
             `
-                : ''
-            }
+								: ''
+						}
           </div>
           
           <p>This MCP Client is requesting to be authorized on ${sanitizeHtml(server.name)}. If you approve, you will be redirected to complete authentication.</p>
@@ -339,5 +347,5 @@ export function createApprovalDialogHTML(params: ApprovalDialogTemplateParams): 
       </div>
     </body>
     </html>
-  `;
+  `
 }

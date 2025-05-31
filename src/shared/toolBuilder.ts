@@ -3,7 +3,10 @@ import { type SchwabApiClient } from '@sudowealth/schwab-api'
 import { z } from 'zod'
 import { logger } from './logger'
 
-export function asTyped<S extends z.ZodSchema>(raw: unknown, sch: S): z.infer<S> {
+export function asTyped<S extends z.ZodSchema>(
+	raw: unknown,
+	sch: S,
+): z.infer<S> {
 	return sch.parse(raw)
 }
 
@@ -24,7 +27,7 @@ type ToolResponse<T = unknown> =
 	| { ok: true; data: T; message?: string }
 	| { ok: false; error: Error; details?: Record<string, unknown> }
 
-export function isOk<T>(
+function isOk<T>(
 	res: ToolResponse<T>,
 ): res is { ok: true; data: T; message?: string } {
 	return res.ok

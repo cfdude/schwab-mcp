@@ -1,7 +1,7 @@
 // Auth error definitions simplified using discriminated unions
 import { logger, LogLevel as AppLogLevel } from '../shared/logger'
 
-export type AuthErrorKind =
+type AuthErrorKind =
 	| 'MissingClientId'
 	| 'MissingState'
 	| 'MissingParameters'
@@ -128,7 +128,7 @@ export function createAuthError(kind: AuthErrorKind, cause?: Error): AuthError {
 	}
 }
 
-export interface JsonErrorResponse {
+interface JsonErrorResponse {
 	code: string
 	message: string
 	requestId?: string

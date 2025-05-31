@@ -1,7 +1,7 @@
 import { type SchwabApiClient } from '@sudowealth/schwab-api'
 import { logger } from './logger'
 
-export type AccountDisplayMap = Record<string, string>
+type AccountDisplayMap = Record<string, string>
 
 type UnknownScrubbed<T> =
 	T extends Array<infer U>

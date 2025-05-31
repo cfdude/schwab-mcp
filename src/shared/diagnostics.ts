@@ -3,7 +3,7 @@ import { buildConfig } from '../config'
 import { makeKvTokenStore } from './kvTokenStore'
 import { logger } from './logger'
 
-export interface DiagnosticInfo {
+interface DiagnosticInfo {
 	timestamp: string
 	hasTokenManager: boolean
 	hasClient: boolean
@@ -36,7 +36,7 @@ export interface DiagnosticInfo {
 	}
 }
 
-export interface DiagnosticContext {
+interface DiagnosticContext {
 	tokenManager: any
 	client: any
 	validatedConfig?: ValidatedEnv

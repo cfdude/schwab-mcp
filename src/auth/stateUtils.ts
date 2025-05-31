@@ -27,10 +27,10 @@ const logger = makeLogger(AppLogLevel.INFO).withContext('oauth-state')
  * Interface for the state envelope structure
  * This provides a symmetric format for encoding and decoding
  */
-export interface StateEnvelope {
-	data: string      // base64 JSON
+interface StateEnvelope {
+	data: string // base64 JSON
 	signature: string // base64 HMAC
-	version: 1        // bump when format changes
+	version: 1 // bump when format changes
 }
 
 /**
