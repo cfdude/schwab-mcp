@@ -1,5 +1,5 @@
 import { type TokenData } from '@sudowealth/schwab-api'
-import { TOKEN_KEY_PREFIX } from './constants'
+import { TOKEN_KEY_PREFIX, TTL_31_DAYS, LOGGER_CONTEXTS } from './constants'
 import { makeLogger, LogLevel as AppLogLevel } from './logger'
 
 /**
@@ -30,9 +30,8 @@ interface KvTokenStore {
  * @returns Token store interface for load/save operations
  */
 export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
-	const TTL_31_DAYS = 31 * 24 * 60 * 60
 	// Create a scoped logger for token store operations
-	const logger = makeLogger(AppLogLevel.DEBUG).withContext('token-store')
+	const logger = makeLogger(AppLogLevel.Debug).withContext(LOGGER_CONTEXTS.KV_TOKEN_STORE)
 
 	/**
 	 * Generate consistent KV key from token identifiers
@@ -65,21 +64,24 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 				raw = await kv.get(fallbackKey)
 				if (raw) {
 					usedKey = fallbackKey
-					logger.debug('Token found in fallback key, will migrate', {
-						primaryKey,
-						fallbackKey,
-					})
 				}
+				logger.debug('Fallback key lookup completed', {
+					primaryKey,
+					fallbackKey,
+					foundInFallback: !!raw,
+				})
 			}
 
+			logger.debug('Token lookup result', {
+				primaryKey,
+				fallbackKey:
+					ids.schwabUserId && ids.clientId
+						? `${TOKEN_KEY_PREFIX}${ids.clientId}`
+						: undefined,
+				found: !!raw,
+				usedKey: raw ? usedKey : 'none',
+			})
 			if (!raw) {
-				logger.debug('No token found in KV', {
-					primaryKey,
-					fallbackKey:
-						ids.schwabUserId && ids.clientId
-							? `${TOKEN_KEY_PREFIX}${ids.clientId}`
-							: undefined,
-				})
 				return null
 			}
 
@@ -136,10 +138,11 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 			}
 
 			const tokenData = await load(fromIds)
+			logger.debug('Migration source token lookup', {
+				fromKey,
+				tokenFound: !!tokenData,
+			})
 			if (!tokenData) {
-				logger.debug('Migration not possible - no token at source key', {
-					fromKey,
-				})
 				return false
 			}
 

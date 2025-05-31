@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { type Env, type ValidatedEnv } from '../../types/env'
 import { logger } from '../shared/logger'
+import { validateRedirectPattern } from './redirectAllowlist'
 
 const envSchema = z.object({
 	SCHWAB_CLIENT_ID: z
@@ -41,12 +42,58 @@ const envSchema = z.object({
 	ALLOWED_REDIRECT_REGEXPS: z
 		.string()
 		.optional()
-		.default(''),
+		.default('')
+		.refine(
+			(value) => {
+				if (!value) return true
+				const patterns = value
+					.split(',')
+					.map((p) => p.trim())
+					.filter((p) => p.length > 0)
+
+				try {
+					for (const pattern of patterns) {
+						validateRedirectPattern(pattern)
+					}
+					return true
+				} catch (error) {
+					logger.error(
+						'ALLOWED_REDIRECT_REGEXPS contains invalid regex patterns',
+						{
+							error: error instanceof Error ? error.message : 'Unknown error',
+						},
+					)
+					return false
+				}
+			},
+			{
+				message: 'ALLOWED_REDIRECT_REGEXPS contains invalid regex patterns',
+			},
+		),
 })
 
 export function buildConfig(env: Env): ValidatedEnv {
 	try {
 		const validated = envSchema.parse(env)
+
+		// Additional validation: Test that createRedirectValidator would succeed
+		// This ensures fail-fast behavior at config build time
+		if (validated.ALLOWED_REDIRECT_REGEXPS) {
+			const testPatterns = validated.ALLOWED_REDIRECT_REGEXPS.split(',')
+				.map((p) => p.trim())
+				.filter((p) => p.length > 0)
+
+			for (const pattern of testPatterns) {
+				try {
+					validateRedirectPattern(pattern)
+				} catch (error) {
+					const msg = `Invalid redirect URI pattern in ALLOWED_REDIRECT_REGEXPS: "${pattern}" - ${error instanceof Error ? error.message : 'Unknown error'}`
+					logger.error(msg)
+					throw new Error(msg)
+				}
+			}
+		}
+
 		return Object.freeze(validated) as ValidatedEnv
 	} catch (error) {
 		if (error instanceof z.ZodError) {

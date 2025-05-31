@@ -11,6 +11,16 @@ import { DurableMCP } from 'workers-mcp'
 import { type ValidatedEnv } from '../types/env'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
 import { buildConfig } from './config'
+import {
+	APP_NAME,
+	API_ENDPOINTS,
+	LOGGER_CONTEXTS,
+	TOOL_NAMES,
+	ENVIRONMENTS,
+	LOG_LEVELS,
+	CONTENT_TYPES,
+	APP_SERVER_NAME,
+} from './shared/constants'
 import { gatherDiagnostics } from './shared/diagnostics'
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
 import { makeLogger, LogLevel } from './shared/logger'
@@ -31,10 +41,10 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	private tokenManager!: EnhancedTokenManager
 	private client!: SchwabApiClient
 	private validatedConfig!: ValidatedEnv
-	private logger = makeLogger(LogLevel.INFO).withContext('mcp-do')
+	private logger = makeLogger(LogLevel.Info).withContext(LOGGER_CONTEXTS.MCP_DO)
 
 	server = new McpServer({
-		name: 'Schwab MCP',
+		name: APP_NAME,
 		version: '0.0.1',
 	})
 
@@ -42,26 +52,28 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 		try {
 			// Register a minimal tool synchronously to ensure Claude Desktop detects tools
 			this.server.tool(
-				'status',
+				TOOL_NAMES.STATUS,
 				'Check Schwab MCP server status',
 				{},
 				async () => ({
 					content: [
 						{
-							type: 'text',
-							text: 'Schwab MCP Server is running. Use tool discovery to see all available tools.',
+							type: CONTENT_TYPES.TEXT,
+							text: `${APP_SERVER_NAME} is running. Use tool discovery to see all available tools.`,
 						},
 					],
 				}),
 			)
 			this.validatedConfig = buildConfig(this.env)
 			// Convert string log level to LogLevel enum
-			const logLevelStr = this.validatedConfig.LOG_LEVEL ?? 'INFO'
+			const logLevelStr = this.validatedConfig.LOG_LEVEL ?? 'info'
+			// Convert to PascalCase for enum lookup
+			const logLevelPascal =
+				logLevelStr.charAt(0).toUpperCase() + logLevelStr.slice(1).toLowerCase()
 			const logLevel =
-				LogLevel[logLevelStr.toUpperCase() as keyof typeof LogLevel] ??
-				LogLevel.INFO
+				LogLevel[logLevelPascal as keyof typeof LogLevel] ?? LogLevel.Info
 			// Update this instance's logger level
-			this.logger = makeLogger(logLevel).withContext('mcp-do')
+			this.logger = makeLogger(logLevel).withContext(LOGGER_CONTEXTS.MCP_DO)
 			const redirectUri = this.validatedConfig.SCHWAB_REDIRECT_URI
 
 			this.logger.debug('[MyMCP.init] STEP 0: Start')
@@ -111,22 +123,17 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				})
 
 				const tokenData = await kvToken.load(tokenIds)
-				if (tokenData) {
-					this.logger.debug('ETM: Token load from KV complete', {
-						hasAccessToken: !!tokenData.accessToken,
-						hasRefreshToken: !!tokenData.refreshToken,
-						expiresAt: tokenData.expiresAt
-							? new Date(tokenData.expiresAt).toISOString()
-							: 'unknown',
-						key: kvToken.kvKey(tokenIds),
-					})
-				} else {
-					this.logger.debug('ETM: No token data in KV', {
-						key: kvToken.kvKey(tokenIds),
-						schwabUserId: tokenIds.schwabUserId,
-						clientId: tokenIds.clientId,
-					})
-				}
+				this.logger.debug('ETM: Token load from KV complete', {
+					hasAccessToken: !!tokenData?.accessToken,
+					hasRefreshToken: !!tokenData?.refreshToken,
+					expiresAt: tokenData?.expiresAt
+						? new Date(tokenData.expiresAt).toISOString()
+						: 'unknown',
+					key: kvToken.kvKey(tokenIds),
+					tokenFound: !!tokenData,
+					schwabUserId: tokenIds.schwabUserId,
+					clientId: tokenIds.clientId,
+				})
 				return tokenData
 			}
 
@@ -135,20 +142,21 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			)
 
 			// 1. Create ETM instance (synchronous)
+			const hadExistingTokenManager = !!this.tokenManager
+			this.logger.debug('[MyMCP.init] STEP 3A: ETM instance setup', {
+				hadExisting: hadExistingTokenManager,
+			})
 			if (!this.tokenManager) {
-				this.logger.debug('[MyMCP.init] STEP 3A: Creating new ETM instance...')
 				this.tokenManager = initializeSchwabAuthClient(
 					this.validatedConfig,
 					redirectUri,
 					loadTokenForETM,
 					saveTokenForETM,
 				) // This is synchronous
-				this.logger.debug('[MyMCP.init] STEP 3B: New ETM instance created.')
-			} else {
-				this.logger.debug(
-					'[MyMCP.init] STEP 3: Re-using existing ETM instance.',
-				)
 			}
+			this.logger.debug('[MyMCP.init] STEP 3B: ETM instance ready', {
+				wasReused: hadExistingTokenManager,
+			})
 
 			const mcpLogger: SchwabApiLogger = {
 				debug: (message: string, ...args: any[]) =>
@@ -178,9 +186,9 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 						{ clientId: this.props.clientId },
 						{ schwabUserId: this.props.schwabUserId },
 					)
-					if (migrateSuccess) {
-						this.logger.debug('[MyMCP.init] STEP 5C: Token migration completed')
-					}
+					this.logger.debug('[MyMCP.init] STEP 5C: Token migration attempt', {
+						success: migrateSuccess,
+					})
 				} catch (migrationError) {
 					this.logger.warn('Token migration failed during init', {
 						error:
@@ -196,10 +204,10 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				globalThis.__schwabClient ??
 				(globalThis.__schwabClient = createApiClient({
 					config: {
-						environment: 'PRODUCTION',
+						environment: ENVIRONMENTS.PRODUCTION,
 						logger: mcpLogger,
 						enableLogging: true,
-						logLevel: 'debug',
+						logLevel: LOG_LEVELS.DEBUG,
 					},
 					auth: this.tokenManager,
 				}))
@@ -338,10 +346,10 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 }
 
 export default new OAuthProvider({
-	apiRoute: '/sse',
-	apiHandler: MyMCP.mount('/sse') as any, // Cast remains due to library typing
+	apiRoute: API_ENDPOINTS.SSE,
+	apiHandler: MyMCP.mount(API_ENDPOINTS.SSE) as any, // Cast remains due to library typing
 	defaultHandler: SchwabHandler as any, // Cast remains
-	authorizeEndpoint: '/authorize',
-	tokenEndpoint: '/token',
-	clientRegistrationEndpoint: '/register',
+	authorizeEndpoint: API_ENDPOINTS.AUTHORIZE,
+	tokenEndpoint: API_ENDPOINTS.TOKEN,
+	clientRegistrationEndpoint: API_ENDPOINTS.REGISTER,
 })

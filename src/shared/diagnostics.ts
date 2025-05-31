@@ -56,6 +56,8 @@ export async function gatherDiagnostics(
 	context: DiagnosticContext,
 ): Promise<DiagnosticInfo> {
 	logger.info('Gathering diagnostic information')
+
+	// Initialize with stable shape - all properties predefined
 	const diagnosticInfo: DiagnosticInfo = {
 		timestamp: new Date().toISOString(),
 		hasTokenManager: !!context.tokenManager,
@@ -63,10 +65,37 @@ export async function gatherDiagnostics(
 		implementationType: context.tokenManager
 			? context.tokenManager.constructor.name
 			: 'undefined',
+		environment: {
+			hasClientId: false,
+			hasClientSecret: false,
+			hasRedirectUri: false,
+			hasCookieKey: false,
+			hasOAuthKV: false,
+		},
+		kvTokenStatus: {
+			hasTokenInKV: false,
+			tokenKey: '',
+			hasAccessToken: false,
+			hasRefreshToken: false,
+			expiresAt: undefined,
+		},
+		kvTokenError: undefined,
+		environmentError: undefined,
+		tokenManagerDiagnostics: undefined,
+		tokenManagerReport: undefined,
+		tokenManagerDiagnosticError: undefined,
+		tokenStatus: {
+			hasValidAccessToken: false,
+			hasExpiredAccessToken: false,
+			hasRefreshToken: false,
+			expiresInSeconds: undefined,
+			lastTokenOperation: undefined,
+		},
 	}
 
 	try {
 		const env = context.validatedConfig ?? buildConfig(context.env)
+		// Update environment properties - shape already exists
 		diagnosticInfo.environment = {
 			hasClientId: !!env.SCHWAB_CLIENT_ID,
 			hasClientSecret: !!env.SCHWAB_CLIENT_SECRET,
@@ -85,6 +114,7 @@ export async function gatherDiagnostics(
 
 			try {
 				const kvTokenData = await kvToken.load(tokenIds)
+				// Update kvTokenStatus properties - shape already exists
 				diagnosticInfo.kvTokenStatus = {
 					hasTokenInKV: !!kvTokenData,
 					tokenKey: kvToken.kvKey(tokenIds),
@@ -114,6 +144,7 @@ export async function gatherDiagnostics(
 				// Extract high-level token status summary if available
 				const diag = diagnosticInfo.tokenManagerDiagnostics
 				if (diag && typeof diag === 'object') {
+					// Update tokenStatus properties - shape already exists
 					diagnosticInfo.tokenStatus = {
 						hasValidAccessToken: !!(diag.hasAccessToken && diag.expiresIn > 0),
 						hasExpiredAccessToken: !!(

@@ -4,10 +4,10 @@
  */
 
 export enum LogLevel {
-	DEBUG = 0,
-	INFO = 1,
-	WARN = 2,
-	ERROR = 3,
+	Debug = 0,
+	Info = 1,
+	Warn = 2,
+	Error = 3,
 }
 
 // Configurable regex patterns for masking secrets
@@ -94,6 +94,7 @@ interface Logger {
 		| 'configureSecretPatterns'
 		| 'addSecretPatterns'
 		| 'addSecretPattern'
+		| 'child'
 	>
 	setLevel: (level: LogLevel) => void
 	getLevel: () => LogLevel
@@ -102,6 +103,7 @@ interface Logger {
 	configureSecretPatterns: (patterns: SecretPattern[]) => void
 	addSecretPatterns: (patterns: SecretPattern[]) => void
 	addSecretPattern: (pattern: RegExp, replacement: string) => void
+	child: (opts?: Partial<LoggerOpts>) => Logger
 }
 
 /**
@@ -208,25 +210,25 @@ export function makeLogger(
 		const contextPrefix = contextId ? `[${contextId}] ` : ''
 
 		switch (level) {
-			case LogLevel.DEBUG:
+			case LogLevel.Debug:
 				console.debug(
 					`[${timestamp}] [${levelName}] ${contextPrefix}${message}`,
 					sanitizedData,
 				)
 				break
-			case LogLevel.INFO:
+			case LogLevel.Info:
 				console.info(
 					`[${timestamp}] [${levelName}] ${contextPrefix}${message}`,
 					sanitizedData,
 				)
 				break
-			case LogLevel.WARN:
+			case LogLevel.Warn:
 				console.warn(
 					`[${timestamp}] [${levelName}] ${contextPrefix}${message}`,
 					sanitizedData,
 				)
 				break
-			case LogLevel.ERROR:
+			case LogLevel.Error:
 				console.error(
 					`[${timestamp}] [${levelName}] ${contextPrefix}${message}`,
 					sanitizedData,
@@ -238,24 +240,24 @@ export function makeLogger(
 	// Return the logger instance with isolated state
 	return {
 		debug: (message: string, data?: any, contextId?: string) =>
-			log(LogLevel.DEBUG, message, data, contextId),
+			log(LogLevel.Debug, message, data, contextId),
 		info: (message: string, data?: any, contextId?: string) =>
-			log(LogLevel.INFO, message, data, contextId),
+			log(LogLevel.Info, message, data, contextId),
 		warn: (message: string, data?: any, contextId?: string) =>
-			log(LogLevel.WARN, message, data, contextId),
+			log(LogLevel.Warn, message, data, contextId),
 		error: (message: string, data?: any, contextId?: string) =>
-			log(LogLevel.ERROR, message, data, contextId),
+			log(LogLevel.Error, message, data, contextId),
 
 		// Helper to create a context-aware logger that automatically includes the contextId
 		withContext: (contextId: string) => ({
 			debug: (message: string, data?: any) =>
-				log(LogLevel.DEBUG, message, data, contextId),
+				log(LogLevel.Debug, message, data, contextId),
 			info: (message: string, data?: any) =>
-				log(LogLevel.INFO, message, data, contextId),
+				log(LogLevel.Info, message, data, contextId),
 			warn: (message: string, data?: any) =>
-				log(LogLevel.WARN, message, data, contextId),
+				log(LogLevel.Warn, message, data, contextId),
 			error: (message: string, data?: any) =>
-				log(LogLevel.ERROR, message, data, contextId),
+				log(LogLevel.Error, message, data, contextId),
 		}),
 
 		// Configuration methods
@@ -287,170 +289,31 @@ export function makeLogger(
 				{ pattern, replacement },
 			]
 		},
+
+		// Create a child logger that inherits current configuration
+		child: (opts?: Partial<LoggerOpts>) => {
+			return makeLogger(state.currentLogLevel, {
+				secretPatterns: [
+					...state.customSecretPatterns,
+					...(opts?.secretPatterns || []),
+				],
+				redactKeys: [...state.customRedactKeys, ...(opts?.redactKeys || [])],
+			})
+		},
 	}
 }
 
-// Global logger instance for backward compatibility
-// Current log level for the application
-// Can be set based on environment
-let currentLogLevel = LogLevel.INFO
-
-// Custom patterns and keys that can be configured by consumers
-let customSecretPatterns: SecretPattern[] = []
-let customRedactKeys: string[] = []
-
-/**
- * Sanitizes log data to ensure no tokens or sensitive information is logged
- *
- * @param data The data to be sanitized
- * @param maxSize Optional max size for truncating large objects/arrays
- * @returns Sanitized data safe for logging
- */
-function sanitizeLogData(data: any, maxSize?: number): any {
-	if (typeof data === 'string') {
-		// Apply all secret patterns in a single pass
-		const allPatterns = [...DEFAULT_SECRET_PATTERNS, ...customSecretPatterns]
-		let sanitizedString = data
-
-		for (const { pattern, replacement } of allPatterns) {
-			sanitizedString = sanitizedString.replace(pattern, replacement)
-		}
-
-		return sanitizedString
+// Get log level from environment or default to Info
+function getLogLevelFromEnv(): LogLevel {
+	const envLevel = process.env.LOG_LEVEL?.toUpperCase()
+	if (envLevel && envLevel in LogLevel) {
+		return LogLevel[envLevel as keyof typeof LogLevel] as LogLevel
 	}
-
-	if (data === null || data === undefined) {
-		return data
-	}
-
-	if (typeof data === 'object') {
-		if (Array.isArray(data)) {
-			// Handle size limits for arrays
-			if (maxSize && data.length > maxSize) {
-				const preview = data
-					.slice(0, maxSize)
-					.map((item) => sanitizeLogData(item, maxSize))
-				return {
-					__preview__: true,
-					items: preview,
-					totalCount: data.length,
-					truncated: true,
-				}
-			}
-			return data.map((item) => sanitizeLogData(item, maxSize))
-		}
-
-		const sanitized: Record<string, any> = {}
-		const allRedactKeys = [...DEFAULT_REDACT_KEYS, ...customRedactKeys]
-
-		for (const [key, value] of Object.entries(data)) {
-			// Check if key should be redacted
-			if (allRedactKeys.some((k) => key.toLowerCase().includes(k))) {
-				sanitized[key] = '[REDACTED]'
-			} else {
-				sanitized[key] = sanitizeLogData(value, maxSize)
-			}
-		}
-		return sanitized
-	}
-
-	return data
+	return LogLevel.Info
 }
 
-/**
- * Creates a log entry with the specified level and message
- *
- * @param level The log level
- * @param message The log message
- * @param data Optional data to include with the log
- * @param contextId Optional correlation/context ID for tracing related logs
- */
-function log(level: LogLevel, message: string, data?: any, contextId?: string) {
-	if (level < currentLogLevel) return
+// Create singleton root logger instance
+const rootLogger = makeLogger(getLogLevelFromEnv())
 
-	// Apply size limits to prevent Cloudflare console overflow (16KB limit)
-	// For large objects, show preview only
-	const maxSize = 2 // Show first 2 items for large arrays
-	const sanitizedData = data ? sanitizeLogData(data, maxSize) : undefined
-	const timestamp = new Date().toISOString()
-	const levelName = LogLevel[level]
-	const contextPrefix = contextId ? `[${contextId}] ` : ''
-
-	switch (level) {
-		case LogLevel.DEBUG:
-			console.debug(
-				`[${timestamp}] [${levelName}] ${contextPrefix}${message}`,
-				sanitizedData,
-			)
-			break
-		case LogLevel.INFO:
-			console.info(
-				`[${timestamp}] [${levelName}] ${contextPrefix}${message}`,
-				sanitizedData,
-			)
-			break
-		case LogLevel.WARN:
-			console.warn(
-				`[${timestamp}] [${levelName}] ${contextPrefix}${message}`,
-				sanitizedData,
-			)
-			break
-		case LogLevel.ERROR:
-			console.error(
-				`[${timestamp}] [${levelName}] ${contextPrefix}${message}`,
-				sanitizedData,
-			)
-			break
-	}
-}
-
-// Public API
-export const logger = {
-	debug: (message: string, data?: any, contextId?: string) =>
-		log(LogLevel.DEBUG, message, data, contextId),
-	info: (message: string, data?: any, contextId?: string) =>
-		log(LogLevel.INFO, message, data, contextId),
-	warn: (message: string, data?: any, contextId?: string) =>
-		log(LogLevel.WARN, message, data, contextId),
-	error: (message: string, data?: any, contextId?: string) =>
-		log(LogLevel.ERROR, message, data, contextId),
-
-	// Helper to create a context-aware logger that automatically includes the contextId
-	withContext: (contextId: string) => ({
-		debug: (message: string, data?: any) =>
-			log(LogLevel.DEBUG, message, data, contextId),
-		info: (message: string, data?: any) =>
-			log(LogLevel.INFO, message, data, contextId),
-		warn: (message: string, data?: any) =>
-			log(LogLevel.WARN, message, data, contextId),
-		error: (message: string, data?: any) =>
-			log(LogLevel.ERROR, message, data, contextId),
-	}),
-
-	// Configuration methods
-	setLevel: (level: LogLevel) => {
-		currentLogLevel = level
-	},
-
-	getLevel: () => currentLogLevel,
-
-	configureRedactKeys: (keys: string[]) => {
-		customRedactKeys = keys
-	},
-
-	addRedactKeys: (keys: string[]) => {
-		customRedactKeys = [...customRedactKeys, ...keys]
-	},
-
-	configureSecretPatterns: (patterns: SecretPattern[]) => {
-		customSecretPatterns = patterns
-	},
-
-	addSecretPatterns: (patterns: SecretPattern[]) => {
-		customSecretPatterns = [...customSecretPatterns, ...patterns]
-	},
-
-	addSecretPattern: (pattern: RegExp, replacement: string) => {
-		customSecretPatterns = [...customSecretPatterns, { pattern, replacement }]
-	},
-}
+// Re-export the singleton logger instance
+export const logger = rootLogger

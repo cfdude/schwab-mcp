@@ -1,4 +1,9 @@
 import { type ValidatedEnv } from '../../types/env'
+import {
+	getDefaultRedirectPatterns,
+	validateRedirectPattern,
+	validateRedirectPatterns,
+} from '../config'
 import { logger } from '../shared/logger'
 
 /**
@@ -8,14 +13,11 @@ class RedirectValidator {
 	private readonly allowedPatterns: RegExp[]
 
 	constructor(patterns: string[]) {
-		this.allowedPatterns = patterns.map((pattern) => {
-			try {
-				return new RegExp(pattern)
-			} catch (error) {
-				logger.error(`Invalid redirect URI pattern: ${pattern}`, error)
-				throw new Error(`Invalid redirect URI pattern: ${pattern}`)
-			}
-		})
+		// Validate all patterns before creating RegExp instances
+		// This ensures fail-fast behavior at initialization
+		validateRedirectPatterns(patterns)
+
+		this.allowedPatterns = patterns.map((pattern) => new RegExp(pattern))
 	}
 
 	/**
@@ -68,32 +70,33 @@ class RedirectValidator {
 	}
 }
 
-// Default allowlist patterns for common MCP client redirect URIs
-const DEFAULT_REDIRECT_PATTERNS = [
-	// Exact matches for known MCP clients
-	'^https://claude\\.ai/api/auth/callback$',
-	'^https://www\\.anthropic\\.com/mcp/auth/callback$',
-
-	// Pattern for localhost development (only in non-production)
-	...(process.env.NODE_ENV !== 'production'
-		? ['^http://localhost:\\d+/.*$', '^http://127\\.0\\.0\\.1:\\d+/.*$']
-		: []),
-
-	// Add more patterns as needed for trusted MCP clients
-]
-
 /**
  * Creates a redirect validator with configurable patterns from environment
+ * @throws Error if any pattern (default or from environment) is invalid
  */
 export function createRedirectValidator(
 	config: ValidatedEnv,
 ): RedirectValidator {
-	const patterns = [...DEFAULT_REDIRECT_PATTERNS]
+	const patterns = [...getDefaultRedirectPatterns()]
 
 	if (config.ALLOWED_REDIRECT_REGEXPS) {
 		const additionalPatterns = config.ALLOWED_REDIRECT_REGEXPS.split(',')
 			.map((pattern) => pattern.trim())
 			.filter((pattern) => pattern.length > 0)
+
+		// Validate each additional pattern before adding
+		for (const pattern of additionalPatterns) {
+			try {
+				validateRedirectPattern(pattern)
+			} catch (error) {
+				// Log the error and throw to fail fast
+				logger.error(
+					`Invalid redirect URI pattern from ALLOWED_REDIRECT_REGEXPS: ${pattern}`,
+					error,
+				)
+				throw error
+			}
+		}
 
 		patterns.push(...additionalPatterns)
 	}

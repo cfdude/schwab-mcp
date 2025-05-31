@@ -145,7 +145,7 @@ export function formatAuthError(
 	error: AuthError,
 	details?: Record<string, any>,
 ): ErrorResponse {
-	const includeStack = logger.getLevel() === AppLogLevel.DEBUG
+	const includeStack = logger.getLevel() === AppLogLevel.Debug
 	let filtered = details
 	if (details && !includeStack) {
 		const { stack, ...rest } = details

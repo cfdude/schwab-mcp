@@ -1,5 +1,10 @@
 import { safeBase64Decode, safeBase64Encode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
+import {
+	LOGGER_CONTEXTS,
+	COOKIE_NAMES,
+	HTTP_HEADERS,
+} from '../shared/constants'
 import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
 import { createAuthError } from './errors'
 import {
@@ -9,9 +14,9 @@ import {
 } from './stateUtils'
 
 // Create scoped logger for cookie operations
-const logger = makeLogger(AppLogLevel.INFO).withContext('cookies')
+const logger = makeLogger(AppLogLevel.Info).withContext(LOGGER_CONTEXTS.COOKIES)
 
-const MCP_APPROVAL = 'mcp-approved-clients'
+const MCP_APPROVAL = COOKIE_NAMES.APPROVED_CLIENTS
 const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365
 
 // --- Helper Functions ---
@@ -360,6 +365,6 @@ export async function parseRedirectApproval(
 	// Return result with headers
 	return {
 		state,
-		headers: { 'Set-Cookie': cookieHeaderValue },
+		headers: { [HTTP_HEADERS.SET_COOKIE]: cookieHeaderValue },
 	}
 }

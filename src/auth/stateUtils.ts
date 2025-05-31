@@ -1,11 +1,14 @@
 import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
 import { safeBase64Decode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
+import { LOGGER_CONTEXTS } from '../shared/constants'
 import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
 import { createAuthError } from './errors'
 
 // Create scoped logger for OAuth state operations
-const logger = makeLogger(AppLogLevel.INFO).withContext('oauth-state')
+const logger = makeLogger(AppLogLevel.Info).withContext(
+	LOGGER_CONTEXTS.STATE_UTILS,
+)
 
 /**
  * IMPORTANT: EnhancedTokenManager State Handling

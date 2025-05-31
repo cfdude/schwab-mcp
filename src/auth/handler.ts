@@ -8,6 +8,7 @@ import {
 import { Hono } from 'hono'
 import { type Env } from '../../types/env'
 import { buildConfig } from '../config'
+import { LOGGER_CONTEXTS, APP_SERVER_NAME } from '../shared/constants'
 import { makeKvTokenStore } from '../shared/kvTokenStore'
 import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
@@ -26,7 +27,9 @@ import { renderApprovalDialog } from './ui'
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>()
 
 // Create a scoped logger for OAuth handlers
-const logger = makeLogger(AppLogLevel.INFO).withContext('oauth-handler')
+const logger = makeLogger(AppLogLevel.Info).withContext(
+	LOGGER_CONTEXTS.OAUTH_HANDLER,
+)
 
 // No need to store config locally, we'll build it per request
 
@@ -66,7 +69,7 @@ app.get('/authorize', async (c) => {
 		return renderApprovalDialog(c.req.raw, {
 			client: await c.env.OAUTH_PROVIDER.lookupClient(clientId),
 			server: {
-				name: 'Schwab MCP Server',
+				name: APP_SERVER_NAME,
 				description:
 					'Access your Schwab accounts and market data in MCP clients.',
 			},

@@ -12,13 +12,16 @@ import {
 import { type Context } from 'hono'
 import { type BlankInput } from 'hono/types'
 import { type ValidatedEnv, type Env } from '../../types/env'
+import { LOGGER_CONTEXTS } from '../shared/constants'
 import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
 import { createAuthError, formatAuthError } from './errors'
 import { encodeStateWithIntegrity } from './stateUtils'
 import { mapTokenPersistence } from './tokenPersistence'
 
 // Create scoped logger for auth client
-const logger = makeLogger(AppLogLevel.INFO).withContext('auth-client')
+const logger = makeLogger(AppLogLevel.Info).withContext(
+	LOGGER_CONTEXTS.AUTH_CLIENT,
+)
 
 /**
  * Creates a Schwab Auth client with enhanced features
