@@ -3,13 +3,6 @@ import { type SchwabApiClient } from '@sudowealth/schwab-api'
 import { z } from 'zod'
 import { logger } from './logger'
 
-export function asTyped<S extends z.ZodSchema>(
-	raw: unknown,
-	sch: S,
-): z.infer<S> {
-	return sch.parse(raw)
-}
-
 // 1. Define and export the toolRegistry
 type ToolHandler<S extends z.ZodSchema> = (
 	input: z.infer<S>,

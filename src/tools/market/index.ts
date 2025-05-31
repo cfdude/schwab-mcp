@@ -10,7 +10,6 @@ import {
 } from '@sudowealth/schwab-api'
 import type * as z from 'zod'
 import {
-	asTyped,
 	createTool,
 	toolError,
 	toolSuccess,
@@ -113,7 +112,7 @@ export function registerMarketTools(
 			schema: spec.schema,
 			handler: async (params, c) => {
 				try {
-					const data = await spec.call(c, asTyped(params, spec.schema))
+					const data = await spec.call(c, params)
 					return toolSuccess({
 						data,
 						source: spec.name,

@@ -14,7 +14,6 @@ import {
 } from '../../shared/accountScrubber'
 import { logger } from '../../shared/logger'
 import {
-	asTyped,
 	createTool,
 	toolError,
 	toolSuccess,
@@ -178,7 +177,7 @@ export function registerTraderTools(
 			schema: spec.schema,
 			handler: async (params, c) => {
 				try {
-					const data = await spec.call(c, asTyped(params, spec.schema))
+					const data = await spec.call(c, params)
 					return toolSuccess({
 						data,
 						source: spec.name,
