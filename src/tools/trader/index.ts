@@ -13,10 +13,16 @@ import {
 	scrubAccountIdentifiers,
 } from '../../shared/accountScrubber'
 import { logger } from '../../shared/logger'
-import { asTyped, createTool, toolError, toolSuccess } from '../../shared/toolBuilder'
+import {
+	asTyped,
+	createTool,
+	toolError,
+	toolSuccess,
+} from '../../shared/toolBuilder'
 
 interface ToolSpec<S extends z.ZodSchema> {
 	name: string
+	description: string
 	schema: S
 	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<unknown>
 }
@@ -24,6 +30,7 @@ interface ToolSpec<S extends z.ZodSchema> {
 const TRADER_TOOLS = [
 	{
 		name: 'getAccounts',
+		description: 'Get accounts',
 		schema: GetAccountsRequestQueryParams,
 		call: async (c, p) => {
 			logger.info('[getAccounts] Fetching accounts', {
@@ -33,14 +40,17 @@ const TRADER_TOOLS = [
 			const accounts = await c.trader.accounts.getAccounts({
 				queryParams: { fields: p?.fields },
 			})
-			const accountSummaries = accounts.map((acc: { securitiesAccount: Record<string, unknown> }) => ({
-				...acc.securitiesAccount,
-			}))
+			const accountSummaries = accounts.map(
+				(acc: { securitiesAccount: Record<string, unknown> }) => ({
+					...acc.securitiesAccount,
+				}),
+			)
 			return scrubAccountIdentifiers(accountSummaries, displayMap)
 		},
 	},
 	{
 		name: 'getAccountNumbers',
+		description: 'Get account numbers',
 		schema: z.object({}),
 		call: async (c) => {
 			logger.info('[getAccountNumbers] Fetching account numbers')
@@ -51,6 +61,7 @@ const TRADER_TOOLS = [
 	},
 	{
 		name: 'getOrders',
+		description: 'Get orders',
 		schema: GetOrdersRequestQueryParams,
 		call: async (c, p) => {
 			logger.info('[getOrders] Fetching orders', {
@@ -64,6 +75,7 @@ const TRADER_TOOLS = [
 	},
 	{
 		name: 'getQuotes',
+		description: 'Get quotes',
 		schema: GetQuotesRequestQueryParamsSchema,
 		call: async (c, p) => {
 			logger.info('[getQuotes] Fetching quotes', {
@@ -81,6 +93,7 @@ const TRADER_TOOLS = [
 	},
 	{
 		name: 'getQuoteBySymbolId',
+		description: 'Get quote by symbol id',
 		schema: GetQuoteBySymbolIdRequestParamsSchema,
 		call: async (c, p) => {
 			logger.info('[getQuoteBySymbolId] Fetching quote', {
@@ -96,6 +109,7 @@ const TRADER_TOOLS = [
 	},
 	{
 		name: 'getTransactions',
+		description: 'Get transactions',
 		schema: GetTransactionsRequestQueryParams,
 		call: async (c, p) => {
 			logger.info('[getTransactions] Fetching accounts')
@@ -135,6 +149,7 @@ const TRADER_TOOLS = [
 	},
 	{
 		name: 'getUserPreference',
+		description: 'Get user preference',
 		schema: z.object({}),
 		call: async (c) => {
 			logger.info('[getUserPreference] Fetching user preference')
@@ -159,6 +174,7 @@ export function registerTraderTools(
 	TRADER_TOOLS.forEach((spec) => {
 		createTool(client, server, {
 			name: spec.name,
+			description: spec.description,
 			schema: spec.schema,
 			handler: async (params, c) => {
 				try {

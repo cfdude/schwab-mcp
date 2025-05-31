@@ -9,10 +9,16 @@ import {
 	GetPriceHistoryRequestQueryParamsSchema,
 } from '@sudowealth/schwab-api'
 import type * as z from 'zod'
-import { asTyped, createTool, toolError, toolSuccess } from '../../shared/toolBuilder'
+import {
+	asTyped,
+	createTool,
+	toolError,
+	toolSuccess,
+} from '../../shared/toolBuilder'
 
 interface ToolSpec<S extends z.ZodSchema> {
 	name: string
+	description: string
 	schema: S
 	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<unknown>
 }
@@ -20,6 +26,7 @@ interface ToolSpec<S extends z.ZodSchema> {
 const MARKET_TOOLS = [
 	{
 		name: 'searchInstruments',
+		description: 'Search for instruments',
 		schema: GetInstrumentsRequestQueryParamsSchema,
 		call: (c, p) =>
 			c.marketData.instruments.getInstruments({
@@ -28,6 +35,7 @@ const MARKET_TOOLS = [
 	},
 	{
 		name: 'getMarketHours',
+		description: 'Get market hours',
 		schema: GetMarketHoursRequestQueryParamsSchema,
 		call: (c, p) =>
 			c.marketData.marketHours.getMarketHours({
@@ -39,6 +47,7 @@ const MARKET_TOOLS = [
 	},
 	{
 		name: 'getMarketHoursByMarketId',
+		description: 'Get market hours by market id',
 		schema: GetMarketHoursByMarketIdRequestParamsSchema,
 		call: (c, p) =>
 			c.marketData.marketHours.getMarketHoursByMarketId({
@@ -48,6 +57,7 @@ const MARKET_TOOLS = [
 	},
 	{
 		name: 'getMovers',
+		description: 'Get movers',
 		schema: GetMoversRequestParamsSchema,
 		call: (c, p) =>
 			c.marketData.movers.getMovers({
@@ -57,6 +67,7 @@ const MARKET_TOOLS = [
 	},
 	{
 		name: 'getOptionChain',
+		description: 'Get option chain',
 		schema: GetOptionChainRequestQueryParamsSchema,
 		call: (c, p) =>
 			c.marketData.options.getOptionChain({
@@ -65,6 +76,7 @@ const MARKET_TOOLS = [
 	},
 	{
 		name: 'getOptionExpirationChain',
+		description: 'Get option expiration chain',
 		schema: GetOptionChainRequestQueryParamsSchema,
 		call: (c, p) =>
 			c.marketData.options.getOptionExpirationChain({
@@ -73,6 +85,7 @@ const MARKET_TOOLS = [
 	},
 	{
 		name: 'getPriceHistory',
+		description: 'Get price history',
 		schema: GetPriceHistoryRequestQueryParamsSchema,
 		call: (c, p) =>
 			c.marketData.priceHistory.getPriceHistory({
@@ -96,6 +109,7 @@ export function registerMarketTools(
 	MARKET_TOOLS.forEach((spec) => {
 		createTool(client, server, {
 			name: spec.name,
+			description: spec.description,
 			schema: spec.schema,
 			handler: async (params, c) => {
 				try {

@@ -158,10 +158,12 @@ export function createTool<S extends z.ZodSchema<any, any>>(
 	server: McpServer,
 	{
 		name,
+		description,
 		schema,
 		handler,
 	}: {
 		name: string
+		description: string
 		schema: S
 		handler: ToolHandler<S>
 	},
@@ -177,6 +179,7 @@ export function createTool<S extends z.ZodSchema<any, any>>(
 	)
 	server.tool(
 		name,
+		description,
 		schema instanceof z.ZodObject ? schema.shape : {},
 		async (args: any) => {
 			try {

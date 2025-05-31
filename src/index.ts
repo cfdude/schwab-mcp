@@ -40,6 +40,20 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 	async init() {
 		try {
+			// Register a minimal tool synchronously to ensure Claude Desktop detects tools
+			this.server.tool(
+				'status',
+				'Check Schwab MCP server status',
+				{},
+				async () => ({
+					content: [
+						{
+							type: 'text',
+							text: 'Schwab MCP Server is running. Use tool discovery to see all available tools.',
+						},
+					],
+				}),
+			)
 			this.validatedConfig = buildConfig(this.env)
 			// Convert string log level to LogLevel enum
 			const logLevelStr = this.validatedConfig.LOG_LEVEL ?? 'INFO'
@@ -50,12 +64,8 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			this.logger = makeLogger(logLevel).withContext('mcp-do')
 			const redirectUri = this.validatedConfig.SCHWAB_REDIRECT_URI
 
-			const isDebug = this.validatedConfig.LOG_LEVEL === 'debug'
-
-			if (isDebug) {
-				this.logger.debug('[MyMCP.init] STEP 0: Start')
-				this.logger.debug('[MyMCP.init] STEP 1: Env initialized.')
-			}
+			this.logger.debug('[MyMCP.init] STEP 0: Start')
+			this.logger.debug('[MyMCP.init] STEP 1: Env initialized.')
 
 			// Create KV token store - single source of truth
 			const kvToken = makeKvTokenStore(this.validatedConfig.OAUTH_KV)
@@ -72,14 +82,12 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			})
 
 			// Debug token IDs during initialization
-			if (isDebug) {
-				this.logger.debug('[MyMCP.init] Token identifiers', {
-					schwabUserId: this.props.schwabUserId,
-					clientId: this.props.clientId,
-					hasSchwabUserId: !!this.props.schwabUserId,
-					expectedKey: kvToken.kvKey(getTokenIds()),
-				})
-			}
+			this.logger.debug('[MyMCP.init] Token identifiers', {
+				schwabUserId: this.props.schwabUserId,
+				clientId: this.props.clientId,
+				hasSchwabUserId: !!this.props.schwabUserId,
+				expectedKey: kvToken.kvKey(getTokenIds()),
+			})
 
 			// Token save function uses KV store exclusively
 			const saveTokenForETM = async (tokenSet: TokenData) => {
@@ -97,12 +105,10 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			// Token load function uses KV store exclusively
 			const loadTokenForETM = async (): Promise<TokenData | null> => {
 				const tokenIds = getTokenIds()
-				if (isDebug) {
-					this.logger.debug('[ETM Load] Attempting to load token', {
-						tokenIds,
-						expectedKey: kvToken.kvKey(tokenIds),
-					})
-				}
+				this.logger.debug('[ETM Load] Attempting to load token', {
+					tokenIds,
+					expectedKey: kvToken.kvKey(tokenIds),
+				})
 
 				const tokenData = await kvToken.load(tokenIds)
 				if (tokenData) {
@@ -124,34 +130,24 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				return tokenData
 			}
 
-			if (isDebug) {
-				this.logger.debug(
-					'[MyMCP.init] STEP 2: Storage and event handlers defined.',
-				)
-			}
+			this.logger.debug(
+				'[MyMCP.init] STEP 2: Storage and event handlers defined.',
+			)
 
 			// 1. Create ETM instance (synchronous)
 			if (!this.tokenManager) {
-				if (isDebug) {
-					this.logger.debug(
-						'[MyMCP.init] STEP 3A: Creating new ETM instance...',
-					)
-				}
+				this.logger.debug('[MyMCP.init] STEP 3A: Creating new ETM instance...')
 				this.tokenManager = initializeSchwabAuthClient(
 					this.validatedConfig,
 					redirectUri,
 					loadTokenForETM,
 					saveTokenForETM,
 				) // This is synchronous
-				if (isDebug) {
-					this.logger.debug('[MyMCP.init] STEP 3B: New ETM instance created.')
-				}
+				this.logger.debug('[MyMCP.init] STEP 3B: New ETM instance created.')
 			} else {
-				if (isDebug) {
-					this.logger.debug(
-						'[MyMCP.init] STEP 3: Re-using existing ETM instance.',
-					)
-				}
+				this.logger.debug(
+					'[MyMCP.init] STEP 3: Re-using existing ETM instance.',
+				)
 			}
 
 			const mcpLogger: SchwabApiLogger = {
@@ -164,22 +160,16 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				error: (message: string, ...args: any[]) =>
 					this.logger.error(message, args.length > 0 ? args[0] : undefined),
 			}
-			if (isDebug) {
-				this.logger.debug('[MyMCP.init] STEP 4: MCP Logger adapted.')
-			}
+			this.logger.debug('[MyMCP.init] STEP 4: MCP Logger adapted.')
 
 			// 2. Proactively initialize ETM to load tokens BEFORE creating client
-			if (isDebug) {
-				this.logger.debug(
-					'[MyMCP.init] STEP 5A: Proactively calling this.tokenManager.initialize() (async)...',
-				)
-			}
+			this.logger.debug(
+				'[MyMCP.init] STEP 5A: Proactively calling this.tokenManager.initialize() (async)...',
+			)
 			const etmInitSuccess = this.tokenManager.initialize()
-			if (isDebug) {
-				this.logger.debug(
-					`[MyMCP.init] STEP 5B: Proactive ETM initialization complete. Success: ${etmInitSuccess}`,
-				)
-			}
+			this.logger.debug(
+				`[MyMCP.init] STEP 5B: Proactive ETM initialization complete. Success: ${etmInitSuccess}`,
+			)
 
 			// 2.5. Auto-migrate tokens if we have schwabUserId but token was loaded from clientId key
 			if (this.props.schwabUserId && this.props.clientId) {
@@ -188,7 +178,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 						{ clientId: this.props.clientId },
 						{ schwabUserId: this.props.schwabUserId },
 					)
-					if (migrateSuccess && isDebug) {
+					if (migrateSuccess) {
 						this.logger.debug('[MyMCP.init] STEP 5C: Token migration completed')
 					}
 				} catch (migrationError) {
@@ -215,22 +205,14 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				}))
 
 			this.client = globalClient
-			if (isDebug) {
-				this.logger.debug('[MyMCP.init] STEP 6: SchwabApiClient ready.')
-			}
+			this.logger.debug('[MyMCP.init] STEP 6: SchwabApiClient ready.')
 
 			// 4. Register tools (this.server.tool calls are synchronous)
-			if (isDebug) {
-				this.logger.debug('[MyMCP.init] STEP 7A: Calling registerTools...')
-			}
+			this.logger.debug('[MyMCP.init] STEP 7A: Calling registerTools...')
 			registerMarketTools(this.client, this.server)
 			registerTraderTools(this.client, this.server)
-			if (isDebug) {
-				this.logger.debug('[MyMCP.init] STEP 7B: registerTools completed.')
-				this.logger.debug(
-					'[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY',
-				)
-			}
+			this.logger.debug('[MyMCP.init] STEP 7B: registerTools completed.')
+			this.logger.debug('[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY')
 		} catch (error: any) {
 			this.logger.error(
 				'[MyMCP.init] FINAL CATCH: UNHANDLED EXCEPTION in init()',
