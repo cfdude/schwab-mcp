@@ -11,10 +11,20 @@ import { DurableMCP } from 'workers-mcp'
 import { type ValidatedEnv } from '../types/env'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
 import { buildConfig } from './config'
+import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
 import { logger, makeLogger } from './shared/logger'
 import { registerMarketTools, registerTraderTools } from './tools'
-// Align MyMCPProps with schwab-api's TokenSet for consistency
-type MyMCPProps = Partial<TokenData>
+
+/**
+ * DO props now contain only IDs needed for token key derivation
+ * Tokens are stored exclusively in KV to prevent divergence
+ */
+type MyMCPProps = {
+	/** Schwab user ID when available (preferred for token key) */
+	schwabUserId?: string
+	/** OAuth client ID (fallback for token key) */
+	clientId?: string
+}
 
 export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	private tokenManager!: EnhancedTokenManager
@@ -39,44 +49,71 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				logger.debug('[MyMCP.init] STEP 1: Env initialized.')
 			}
 
-			// Use schwab-api's TokenSet for the function signatures
-			const saveTokenForETM = async (tokenSet: TokenData) => {
-				if (tokenSet.accessToken) this.props.accessToken = tokenSet.accessToken
-				if (tokenSet.refreshToken)
-					this.props.refreshToken = tokenSet.refreshToken
-				if (tokenSet.expiresAt) this.props.expiresAt = tokenSet.expiresAt
+			// Create KV token store - single source of truth
+			const kvToken = makeKvTokenStore(this.validatedConfig.OAUTH_KV)
+
+			// Ensure clientId is stored in props for token key derivation
+			if (!this.props.clientId) {
+				this.props.clientId = this.validatedConfig.SCHWAB_CLIENT_ID
 				this.props = { ...this.props }
-				logger.debug('ETM: Token save to DO props complete', {
+			}
+
+			const getTokenIds = (): TokenIdentifiers => ({
+				schwabUserId: this.props.schwabUserId,
+				clientId: this.props.clientId,
+			})
+
+			// Debug token IDs during initialization
+			if (isDebug) {
+				logger.debug('[MyMCP.init] Token identifiers', {
+					schwabUserId: this.props.schwabUserId,
+					clientId: this.props.clientId,
+					hasSchwabUserId: !!this.props.schwabUserId,
+					expectedKey: kvToken.kvKey(getTokenIds()),
+				})
+			}
+
+			// Token save function uses KV store exclusively
+			const saveTokenForETM = async (tokenSet: TokenData) => {
+				await kvToken.save(getTokenIds(), tokenSet)
+				logger.debug('ETM: Token save to KV complete', {
 					hasAccessToken: !!tokenSet.accessToken,
 					hasRefreshToken: !!tokenSet.refreshToken,
 					expiresAt: tokenSet.expiresAt
 						? new Date(tokenSet.expiresAt).toISOString()
 						: 'unknown',
+					key: kvToken.kvKey(getTokenIds()),
 				})
 			}
 
+			// Token load function uses KV store exclusively
 			const loadTokenForETM = async (): Promise<TokenData | null> => {
-				if (
-					this.props.accessToken &&
-					this.props.refreshToken &&
-					this.props.expiresAt
-				) {
-					const tokenData: TokenData = {
-						accessToken: this.props.accessToken,
-						refreshToken: this.props.refreshToken,
-						expiresAt: this.props.expiresAt,
-					}
-					logger.debug('ETM: Token load from DO props complete', {
+				const tokenIds = getTokenIds()
+				if (isDebug) {
+					logger.debug('[ETM Load] Attempting to load token', {
+						tokenIds,
+						expectedKey: kvToken.kvKey(tokenIds),
+					})
+				}
+
+				const tokenData = await kvToken.load(tokenIds)
+				if (tokenData) {
+					logger.debug('ETM: Token load from KV complete', {
 						hasAccessToken: !!tokenData.accessToken,
 						hasRefreshToken: !!tokenData.refreshToken,
 						expiresAt: tokenData.expiresAt
 							? new Date(tokenData.expiresAt).toISOString()
 							: 'unknown',
+						key: kvToken.kvKey(tokenIds),
 					})
-					return tokenData
+				} else {
+					logger.debug('ETM: No token data in KV', {
+						key: kvToken.kvKey(tokenIds),
+						schwabUserId: tokenIds.schwabUserId,
+						clientId: tokenIds.clientId,
+					})
 				}
-				logger.debug('ETM: No token data in DO props for ETM load')
-				return null
+				return tokenData
 			}
 
 			if (isDebug) {
@@ -128,6 +165,26 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				logger.debug(
 					`[MyMCP.init] STEP 5B: Proactive ETM initialization complete. Success: ${etmInitSuccess}`,
 				)
+			}
+
+			// 2.5. Auto-migrate tokens if we have schwabUserId but token was loaded from clientId key
+			if (this.props.schwabUserId && this.props.clientId) {
+				try {
+					const migrateSuccess = await kvToken.migrate(
+						{ clientId: this.props.clientId },
+						{ schwabUserId: this.props.schwabUserId },
+					)
+					if (migrateSuccess && isDebug) {
+						logger.debug('[MyMCP.init] STEP 5C: Token migration completed')
+					}
+				} catch (migrationError) {
+					logger.warn('Token migration failed during init', {
+						error:
+							migrationError instanceof Error
+								? migrationError.message
+								: String(migrationError),
+					})
+				}
 			}
 
 			// 3. Create SchwabApiClient AFTER tokens are loaded
@@ -277,6 +334,31 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				hasRedirectUri: !!env.SCHWAB_REDIRECT_URI,
 				hasCookieKey: !!env.COOKIE_ENCRYPTION_KEY,
 				hasOAuthKV: !!env.OAUTH_KV,
+			}
+
+			// Add KV token diagnostics
+			if (env.OAUTH_KV && this.props) {
+				const kvToken = makeKvTokenStore(env.OAUTH_KV)
+				const tokenIds = {
+					schwabUserId: this.props.schwabUserId,
+					clientId: this.props.clientId,
+				}
+
+				try {
+					const kvTokenData = await kvToken.load(tokenIds)
+					diagnosticInfo.kvTokenStatus = {
+						hasTokenInKV: !!kvTokenData,
+						tokenKey: kvToken.kvKey(tokenIds),
+						hasAccessToken: !!kvTokenData?.accessToken,
+						hasRefreshToken: !!kvTokenData?.refreshToken,
+						expiresAt: kvTokenData?.expiresAt
+							? new Date(kvTokenData.expiresAt).toISOString()
+							: undefined,
+					}
+				} catch (kvError) {
+					diagnosticInfo.kvTokenError =
+						kvError instanceof Error ? kvError.message : String(kvError)
+				}
 			}
 		} catch (envError) {
 			diagnosticInfo.environmentError =

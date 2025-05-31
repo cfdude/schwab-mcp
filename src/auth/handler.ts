@@ -8,6 +8,7 @@ import {
 import { Hono } from 'hono'
 import { type Env } from '../../types/env'
 import { buildConfig } from '../config'
+import { makeKvTokenStore } from '../shared/kvTokenStore'
 import { logger } from '../shared/logger'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
 import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
@@ -197,20 +198,19 @@ app.get('/callback', async (c) => {
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
 
-		// Set up redirect URI and token storage for KV
+		// Set up redirect URI and token storage using centralized KV helper
 		const redirectUri = config.SCHWAB_REDIRECT_URI
-		const userIdForKV = clientIdFromState // Use the validated clientId for KV key consistency
+		const kvToken = makeKvTokenStore(config.OAUTH_KV)
+
+		// Initial token identifiers (before we get schwabUserId)
+		const getInitialTokenIds = () => ({ clientId: clientIdFromState })
 
 		const saveToken = async (tokenData: TokenData) => {
-			await config.OAUTH_KV?.put(
-				`token:${userIdForKV}`,
-				JSON.stringify(tokenData),
-			)
+			await kvToken.save(getInitialTokenIds(), tokenData)
 		}
 
 		const loadToken = async (): Promise<TokenData | null> => {
-			const tokenStr = await config.OAUTH_KV?.get(`token:${userIdForKV}`)
-			return tokenStr ? (JSON.parse(tokenStr) as TokenData) : null
+			return await kvToken.load(getInitialTokenIds())
 		}
 
 		// Use the validated config for auth client to ensure consistency
@@ -304,6 +304,28 @@ app.get('/callback', async (c) => {
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
 
+		// Migrate token from clientId-based key to schwabUserId-based key
+		try {
+			const currentTokenData = await kvToken.load({
+				clientId: clientIdFromState,
+			})
+			if (currentTokenData) {
+				// Save under schwabUserId key
+				await kvToken.save({ schwabUserId: userIdFromSchwab }, currentTokenData)
+				logger.info('Token migrated to schwabUserId key', {
+					fromKey: kvToken.kvKey({ clientId: clientIdFromState }),
+					toKey: kvToken.kvKey({ schwabUserId: userIdFromSchwab }),
+				})
+			}
+		} catch (migrationError) {
+			logger.warn('Token migration failed, continuing with authorization', {
+				error:
+					migrationError instanceof Error
+						? migrationError.message
+						: String(migrationError),
+			})
+		}
+
 		// Complete the authorization flow using the decoded AuthRequest object
 		const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
 			request: decodedStateAsAuthRequest,
@@ -311,10 +333,9 @@ app.get('/callback', async (c) => {
 			metadata: { label: userIdFromSchwab },
 			scope: decodedStateAsAuthRequest.scope,
 			props: {
-				userId: userIdFromSchwab,
-				accessToken: tokenSet.accessToken,
-				refreshToken: tokenSet.refreshToken,
-				expiresAt: tokenSet.expiresAt,
+				// Only store IDs for token key derivation - tokens are in KV
+				schwabUserId: userIdFromSchwab,
+				clientId: clientIdFromState,
 			},
 		})
 

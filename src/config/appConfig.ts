@@ -29,7 +29,9 @@ const envSchema = z.object({
 		})
 		.url('SCHWAB_REDIRECT_URI must be a valid URL'),
 
-	OAUTH_KV: z.any().optional(),
+	OAUTH_KV: z.any().refine((v) => !!v, {
+		message: 'OAUTH_KV binding is required for token storage',
+	}),
 
 	LOG_LEVEL: z
 		.enum(['debug', 'info', 'warn', 'error'])

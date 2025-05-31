@@ -28,9 +28,9 @@ export interface Env {
 	SCHWAB_REDIRECT_URI: string
 
 	/**
-	 * KV namespace for storing tokens
+	 * KV namespace for storing tokens (required)
 	 */
-	OAUTH_KV?: KVNamespace
+	OAUTH_KV: KVNamespace
 
 	/**
 	 * Optional log level for application logging
@@ -65,9 +65,9 @@ export interface ValidatedEnv {
 	readonly SCHWAB_REDIRECT_URI: string
 
 	/**
-	 * KV namespace for storing tokens
+	 * KV namespace for storing tokens (required)
 	 */
-	readonly OAUTH_KV?: KVNamespace
+	readonly OAUTH_KV: KVNamespace
 
 	/**
 	 * Optional log level for application logging
