@@ -1,6 +1,6 @@
 import { type TokenData } from '@sudowealth/schwab-api'
 import { TOKEN_KEY_PREFIX, TTL_31_DAYS, LOGGER_CONTEXTS } from './constants'
-import { logger } from './logger'
+import { logger } from './log'
 
 /**
  * Token identifiers for KV key generation

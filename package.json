@@ -32,6 +32,7 @@
     "@modelcontextprotocol/sdk": "^1.11.5",
     "@sudowealth/schwab-api": "^2.1.0-beta.6",
     "hono": "^4.7.10",
+    "pino": "^9.7.0",
     "workers-mcp": "^0.1.0-3",
     "zod": "^3.25.17"
   },

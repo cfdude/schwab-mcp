@@ -1,7 +1,7 @@
 import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { type SchwabApiClient } from '@sudowealth/schwab-api'
 import { z } from 'zod'
-import { logger } from './logger'
+import { logger } from './log'
 
 // 1. Define and export the toolRegistry
 type ToolHandler<S extends z.ZodSchema> = (

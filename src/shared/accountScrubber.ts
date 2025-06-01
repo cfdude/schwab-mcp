@@ -1,5 +1,5 @@
 import { type SchwabApiClient } from '@sudowealth/schwab-api'
-import { logger } from './logger'
+import { logger } from './log'
 
 type AccountDisplayMap = Record<string, string>
 

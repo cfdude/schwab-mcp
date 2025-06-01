@@ -2,7 +2,7 @@ import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
 import { safeBase64Decode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
-import { logger } from '../shared/logger'
+import { logger } from '../shared/log'
 import { AuthErrors } from './errors'
 import * as jwt from './jwt'
 
@@ -25,7 +25,6 @@ const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
  * - Our decodeAndVerifyState still works to extract application data after ETM processing
  */
 
-
 /**
  * Interface for structured state data
  */
@@ -35,7 +34,6 @@ export interface StateData {
 	oauthReqInfo?: AuthRequest
 	[key: string]: any
 }
-
 
 /**
  * Encodes state with integrity protection using JWT

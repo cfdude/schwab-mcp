@@ -1,6 +1,6 @@
 import { type ClientInfo } from '@cloudflare/workers-oauth-provider'
 import { type ValidatedEnv } from '../../../types/env'
-import { logger } from '../../shared/logger'
+import { logger } from '../../shared/log'
 import { createRedirectValidator } from '../redirectValidator'
 import { createApprovalDialogHTML } from './templates'
 

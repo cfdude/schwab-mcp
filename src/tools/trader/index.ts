@@ -10,7 +10,7 @@ import {
 	buildAccountDisplayMap,
 	scrubAccountIdentifiers,
 } from '../../shared/accountScrubber'
-import { logger } from '../../shared/logger'
+import { logger } from '../../shared/log'
 import { type ToolSpec } from '../types'
 
 export const toolSpecs: ToolSpec<z.ZodSchema>[] = [

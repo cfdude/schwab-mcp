@@ -4,7 +4,7 @@ import {
 	validateRedirectPattern,
 	validateRedirectPatterns,
 } from '../config'
-import { logger } from '../shared/logger'
+import { logger } from '../shared/log'
 
 /**
  * Validates redirect URIs against an allowlist of trusted patterns

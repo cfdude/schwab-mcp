@@ -1,5 +1,5 @@
 import { LOGGER_CONTEXTS } from '../shared/constants'
-import { logger } from '../shared/logger'
+import { logger } from '../shared/log'
 
 const jwtLogger = logger.child(LOGGER_CONTEXTS.JWT)
 
@@ -42,7 +42,11 @@ async function createHmacSignature(
 		['sign'],
 	)
 
-	const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message))
+	const signature = await crypto.subtle.sign(
+		'HMAC',
+		key,
+		encoder.encode(message),
+	)
 	return base64UrlEncode(new Uint8Array(signature))
 }
 

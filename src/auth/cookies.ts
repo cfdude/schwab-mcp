@@ -5,7 +5,7 @@ import {
 	COOKIE_NAMES,
 	HTTP_HEADERS,
 } from '../shared/constants'
-import { logger } from '../shared/logger'
+import { logger } from '../shared/log'
 import { AuthErrors } from './errors'
 import {
 	decodeAndVerifyState,

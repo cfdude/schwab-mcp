@@ -23,7 +23,7 @@ import {
 } from './shared/constants'
 import { gatherDiagnostics } from './shared/diagnostics'
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
-import { logger, LogLevel, configureLogger } from './shared/logger'
+import { logger, buildLogger, type PinoLogLevel } from './shared/log'
 import { createTool, toolError, toolSuccess } from './shared/toolBuilder'
 import { allToolSpecs } from './tools/_registry'
 
@@ -66,15 +66,11 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				}),
 			)
 			this.validatedConfig = buildConfig(this.env)
-			// Convert string log level to LogLevel enum
-			const logLevelStr = this.validatedConfig.LOG_LEVEL ?? 'info'
-			// Convert to PascalCase for enum lookup
-			const logLevelPascal =
-				logLevelStr.charAt(0).toUpperCase() + logLevelStr.slice(1).toLowerCase()
-			const logLevel =
-				LogLevel[logLevelPascal as keyof typeof LogLevel] ?? LogLevel.Info
-			// Configure global logger level
-			configureLogger(logLevel)
+			// Initialize logger with configured level
+			const logLevel = this.validatedConfig.LOG_LEVEL as PinoLogLevel
+			const newLogger = buildLogger(logLevel)
+			// Replace the singleton logger instance
+			Object.assign(logger, newLogger)
 			const redirectUri = this.validatedConfig.SCHWAB_REDIRECT_URI
 
 			this.mcpLogger.debug('[MyMCP.init] STEP 0: Start')

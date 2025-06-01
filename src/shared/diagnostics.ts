@@ -1,7 +1,7 @@
 import { type ValidatedEnv } from '../../types/env'
 import { buildConfig } from '../config'
 import { makeKvTokenStore } from './kvTokenStore'
-import { logger } from './logger'
+import { logger } from './log'
 
 interface DiagnosticInfo {
 	timestamp: string

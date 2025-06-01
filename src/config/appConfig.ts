@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { type Env, type ValidatedEnv } from '../../types/env'
-import { logger } from '../shared/logger'
+import { logger } from '../shared/log'
 import { validateRedirectPattern } from './redirectAllowlist'
 
 const envSchema = z.object({
@@ -35,7 +35,7 @@ const envSchema = z.object({
 	}),
 
 	LOG_LEVEL: z
-		.enum(['debug', 'info', 'warn', 'error'])
+		.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])
 		.optional()
 		.default('info'),
 
