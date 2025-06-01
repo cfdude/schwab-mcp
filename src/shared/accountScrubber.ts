@@ -23,8 +23,10 @@ type UnknownScrubbed<T> =
 export async function buildAccountDisplayMap(
 	client: SchwabApiClient,
 ): Promise<AccountDisplayMap> {
-	const userPref = await client.trader.userPreference.getUserPreference()
-	const accountNumbers = await client.trader.accounts.getAccountNumbers()
+	const [userPref, accountNumbers] = await Promise.all([
+		client.trader.userPreference.getUserPreference(),
+		client.trader.accounts.getAccountNumbers(),
+	])
 
 	const prefMap = new Map<string, string>()
 	for (const acc of userPref.accounts) {

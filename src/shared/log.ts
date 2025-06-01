@@ -25,10 +25,10 @@ export interface AppLogger {
 
 // Child logger interface
 export interface ChildLogger {
-	debug: (message: string, data?: any) => void
-	info: (message: string, data?: any) => void
-	warn: (message: string, data?: any) => void
-	error: (message: string, data?: any) => void
+	debug: (message: string, data?: any, contextId?: string) => void
+	info: (message: string, data?: any, contextId?: string) => void
+	warn: (message: string, data?: any, contextId?: string) => void
+	error: (message: string, data?: any, contextId?: string) => void
 }
 
 // Redaction paths for sensitive data
@@ -138,23 +138,26 @@ export function buildLogger(level: PinoLogLevel = 'info'): AppLogger {
 		error: createLogFunction(baseLogger.error.bind(baseLogger)),
 		child: (contextId: string): ChildLogger => {
 			const childLogger = baseLogger.child({ contextId })
+			
+			const createChildLogFunction = (
+				logFn: pino.LogFn,
+			): ((message: string, data?: any, contextId?: string) => void) => {
+				return (message: string, data?: any, additionalContextId?: string) => {
+					if (additionalContextId) {
+						logFn({ contextId: additionalContextId, ...data }, message)
+					} else if (data !== undefined) {
+						logFn(data, message)
+					} else {
+						logFn(message)
+					}
+				}
+			}
+			
 			return {
-				debug: (message: string, data?: any) =>
-					data !== undefined
-						? childLogger.debug(data, message)
-						: childLogger.debug(message),
-				info: (message: string, data?: any) =>
-					data !== undefined
-						? childLogger.info(data, message)
-						: childLogger.info(message),
-				warn: (message: string, data?: any) =>
-					data !== undefined
-						? childLogger.warn(data, message)
-						: childLogger.warn(message),
-				error: (message: string, data?: any) =>
-					data !== undefined
-						? childLogger.error(data, message)
-						: childLogger.error(message),
+				debug: createChildLogFunction(childLogger.debug.bind(childLogger)),
+				info: createChildLogFunction(childLogger.info.bind(childLogger)),
+				warn: createChildLogFunction(childLogger.warn.bind(childLogger)),
+				error: createChildLogFunction(childLogger.error.bind(childLogger)),
 			}
 		},
 	}

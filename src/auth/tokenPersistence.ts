@@ -10,15 +10,19 @@ import {
  * @param save Function to save tokens to storage
  * @returns Mapped load and save functions compatible with EnhancedTokenManager
  */
-export function mapTokenPersistence(
+export function mapTokenPersistence<T extends EnhancedTokenManagerOptions = EnhancedTokenManagerOptions>(
 	load?: () => Promise<TokenData | null>,
 	save?: (tokenData: TokenData) => Promise<void>,
-): Pick<EnhancedTokenManagerOptions, 'load' | 'save'> {
-	const mappedLoad = load ? async () => load() : undefined
-	const mappedSave = save ? async (d: TokenData) => save(d) : undefined
+): Pick<T, 'load' | 'save'> {
+	const mappedLoad: (() => Promise<TokenData | null>) | undefined = load
+		? async (): Promise<TokenData | null> => load()
+		: undefined
+	const mappedSave: ((d: TokenData) => Promise<void>) | undefined = save
+		? async (d: TokenData): Promise<void> => save(d)
+		: undefined
 
 	return {
 		load: mappedLoad,
 		save: mappedSave,
-	}
+	} as Pick<T, 'load' | 'save'>
 }

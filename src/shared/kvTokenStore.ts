@@ -55,48 +55,64 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 
 	/**
 	 * Load token data from KV store
-	 * Tries schwabUserId key first, then falls back to clientId key
+	 * Reads both schwabUserId and clientId keys in parallel, with schwabUserId taking precedence
 	 */
 	const load = async (ids: TokenIdentifiers): Promise<T | null> => {
 		try {
-			// Try primary key first (schwabUserId preferred, or clientId if no schwabUserId)
-			const primaryKey = kvKey(ids)
-			let raw = await kv.get(primaryKey)
-			let usedKey = primaryKey
+			// Build list of keys to check
+			const keysToCheck: string[] = []
+			const schwabUserKey = ids.schwabUserId ? `${TOKEN_KEY_PREFIX}${ids.schwabUserId}` : null
+			const clientKey = ids.clientId ? `${TOKEN_KEY_PREFIX}${ids.clientId}` : null
 
-			// If not found and we have both IDs, try the fallback key
-			if (!raw && ids.schwabUserId && ids.clientId) {
-				const fallbackKey = `${TOKEN_KEY_PREFIX}${ids.clientId}`
-				raw = await kv.get(fallbackKey)
-				if (raw) {
-					usedKey = fallbackKey
+			if (schwabUserKey) keysToCheck.push(schwabUserKey)
+			if (clientKey && clientKey !== schwabUserKey) keysToCheck.push(clientKey)
+
+			if (keysToCheck.length === 0) {
+				throw new Error(
+					'Token identifiers must include either schwabUserId or clientId',
+				)
+			}
+
+			// Read all keys in parallel
+			const results = await Promise.all(
+				keysToCheck.map(key => kv.get(key).then(value => ({ key, value })))
+			)
+
+			// Find the first non-null result, prioritizing schwabUserId
+			let tokenData: T | null = null
+			let sourceKey: string | null = null
+			
+			for (const { key, value } of results) {
+				if (value) {
+					tokenData = JSON.parse(value) as T
+					sourceKey = key
+					break
 				}
-				kvLogger.debug('Fallback key lookup completed', {
-					primaryKey,
-					fallbackKey,
-					foundInFallback: !!raw,
-				})
 			}
 
 			kvLogger.debug('Token lookup result', {
-				primaryKey,
-				fallbackKey:
-					ids.schwabUserId && ids.clientId
-						? `${TOKEN_KEY_PREFIX}${ids.clientId}`
-						: undefined,
-				found: !!raw,
-				usedKey: raw ? usedKey : 'none',
+				keysChecked: keysToCheck,
+				found: !!tokenData,
+				sourceKey: sourceKey || 'none',
 			})
-			if (!raw) {
-				return null
+
+			// If we found a token under clientId but have a schwabUserId, migrate it
+			if (tokenData && sourceKey === clientKey && schwabUserKey && clientKey && schwabUserKey !== sourceKey) {
+				kvLogger.info('Migrating token from clientId to schwabUserId key', {
+					fromKey: clientKey,
+					toKey: schwabUserKey,
+				})
+				
+				// Atomically migrate: put to new key, then delete old key
+				await kv.put(schwabUserKey, JSON.stringify(tokenData), { expirationTtl: TTL_31_DAYS })
+				await kv.delete(clientKey)
+				
+				kvLogger.debug('Token migration completed', {
+					fromKey: clientKey,
+					toKey: schwabUserKey,
+				})
 			}
 
-			const tokenData = JSON.parse(raw) as T
-			kvLogger.debug('Token loaded from KV', {
-				key: usedKey,
-				hasToken: !!tokenData.accessToken,
-				isPrimaryKey: usedKey === primaryKey,
-			})
 			return tokenData
 		} catch (error) {
 			kvLogger.error('Failed to load token from KV', { error, ids })
@@ -143,21 +159,24 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 				return true
 			}
 
-			const tokenData = await load(fromIds)
-			kvLogger.debug('Migration source token lookup', {
-				fromKey,
-				tokenFound: !!tokenData,
-			})
-			if (!tokenData) {
+			// Read the token directly from the source key
+			const raw = await kv.get(fromKey)
+			if (!raw) {
+				kvLogger.debug('Migration source token not found', { fromKey })
 				return false
 			}
 
-			await save(toIds, tokenData)
+			const tokenData = JSON.parse(raw) as T
+			kvLogger.debug('Migration source token found', {
+				fromKey,
+				hasToken: !!tokenData.accessToken,
+			})
+
+			// Atomically migrate: put to new key, then delete old key
+			await kv.put(toKey, raw, { expirationTtl: TTL_31_DAYS })
+			await kv.delete(fromKey)
+			
 			kvLogger.info('Token migrated successfully', { fromKey, toKey })
-
-			// Don't delete the old key immediately - let it expire naturally
-			// This prevents issues if there are multiple DO instances
-
 			return true
 		} catch (error) {
 			kvLogger.error('Token migration failed', { error, fromIds, toIds })
