@@ -6,7 +6,7 @@ import {
 	HTTP_HEADERS,
 } from '../shared/constants'
 import { logger } from '../shared/logger'
-import { createAuthError } from './errors'
+import { AuthErrors } from './errors'
 import {
 	decodeAndVerifyState,
 	extractClientIdFromState,
@@ -56,7 +56,7 @@ function fromHex(hexString: string): ArrayBuffer {
  */
 async function importKey(secret: string): Promise<CryptoKey> {
 	if (!secret) {
-		throw createAuthError('CookieSecretMissing')
+		throw new AuthErrors.CookieSecretMissing()
 	}
 	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
@@ -148,7 +148,7 @@ async function verifyAndDecodeCookie<T>(
 
 	const parts = cookieValue.split('.')
 	if (parts.length !== 2) {
-		const error = createAuthError('InvalidCookieFormat')
+		const error = new AuthErrors.InvalidCookieFormat()
 		cookieLogger.warn(error.message)
 		return undefined
 	}
@@ -182,7 +182,7 @@ async function verifyAndDecodeCookie<T>(
 	const isValid = await verifySignature(key, signatureHex, payloadString)
 
 	if (!isValid) {
-		const error = createAuthError('CookieSignature')
+		const error = new AuthErrors.CookieSignature()
 		cookieLogger.warn(error.message)
 		return undefined
 	}
@@ -316,7 +316,7 @@ export async function parseRedirectApproval(
 ): Promise<ParsedApprovalResult> {
 	const cookieSecret = config.COOKIE_ENCRYPTION_KEY
 	if (request.method !== 'POST') {
-		throw createAuthError('InvalidRequestMethod')
+		throw new AuthErrors.InvalidRequestMethod()
 	}
 
 	let encodedState: string
@@ -328,13 +328,13 @@ export async function parseRedirectApproval(
 		const stateParam = formData.get('state')
 
 		if (typeof stateParam !== 'string' || !stateParam) {
-			throw createAuthError('MissingFormState')
+			throw new AuthErrors.MissingFormState()
 		}
 
 		encodedState = stateParam
 		const decodedState = await decodeAndVerifyState(config, encodedState)
 		if (!decodedState) {
-			throw createAuthError('InvalidState')
+			throw new AuthErrors.InvalidState()
 		}
 		state = decodedState
 		clientId = extractClientIdFromState(state)

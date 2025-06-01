@@ -3,7 +3,7 @@ import { safeBase64Decode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/logger'
-import { createAuthError } from './errors'
+import { AuthErrors } from './errors'
 
 // Create scoped logger for OAuth state operations
 const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
@@ -213,7 +213,7 @@ export function extractClientIdFromState(state: StateData): string {
 	const clientId = state.clientId || state.oauthReqInfo?.clientId
 
 	if (!clientId) {
-		throw createAuthError('ClientIdExtraction')
+		throw new AuthErrors.ClientIdExtraction()
 	}
 
 	return clientId

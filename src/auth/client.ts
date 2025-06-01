@@ -14,7 +14,7 @@ import { type BlankInput } from 'hono/types'
 import { type ValidatedEnv, type Env } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/logger'
-import { createAuthError, formatAuthError } from './errors'
+import { AuthErrors, formatAuthError } from './errors'
 import { encodeStateWithIntegrity } from './stateUtils'
 import { mapTokenPersistence } from './tokenPersistence'
 
@@ -123,7 +123,9 @@ export async function redirectToSchwab(
 			return Response.redirect(authUrl, 302)
 		}
 	} catch (error) {
-		const authError = createAuthError('AuthUrl')
+		const authError = new AuthErrors.AuthUrl(
+			error instanceof Error ? error : undefined,
+		)
 		const errorInfo = formatAuthError(authError, { error })
 		authLogger.error(errorInfo.message, { error })
 		return new Response(errorInfo.message, { status: errorInfo.status })
