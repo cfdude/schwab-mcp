@@ -21,6 +21,10 @@ interface KvTokenStore {
 	save(ids: TokenIdentifiers, data: TokenData): Promise<void>
 	kvKey(ids: TokenIdentifiers): string
 	migrate(fromIds: TokenIdentifiers, toIds: TokenIdentifiers): Promise<boolean>
+	migrateIfNeeded(
+		fromIds: TokenIdentifiers,
+		toIds: TokenIdentifiers,
+	): Promise<void>
 }
 
 /**
@@ -159,10 +163,38 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 		}
 	}
 
+	/**
+	 * Check if migration is needed and perform it if required
+	 * Encapsulates the migration logic that was previously in MyMCP.init()
+	 */
+	const migrateIfNeeded = async (
+		fromIds: TokenIdentifiers,
+		toIds: TokenIdentifiers,
+	): Promise<void> => {
+		try {
+			const migrateSuccess = await migrate(fromIds, toIds)
+			kvLogger.debug('Migration attempt completed', {
+				success: migrateSuccess,
+				fromKey: kvKey(fromIds),
+				toKey: kvKey(toIds),
+			})
+		} catch (migrationError) {
+			kvLogger.warn('Token migration failed during migrateIfNeeded', {
+				error:
+					migrationError instanceof Error
+						? migrationError.message
+						: String(migrationError),
+				fromIds,
+				toIds,
+			})
+		}
+	}
+
 	return {
 		load,
 		save,
 		kvKey,
 		migrate,
+		migrateIfNeeded,
 	}
 }

@@ -178,25 +178,11 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 			// 2.5. Auto-migrate tokens if we have schwabUserId but token was loaded from clientId key
 			if (this.props.schwabUserId && this.props.clientId) {
-				try {
-					const migrateSuccess = await kvToken.migrate(
-						{ clientId: this.props.clientId },
-						{ schwabUserId: this.props.schwabUserId },
-					)
-					this.mcpLogger.debug(
-						'[MyMCP.init] STEP 5C: Token migration attempt',
-						{
-							success: migrateSuccess,
-						},
-					)
-				} catch (migrationError) {
-					this.mcpLogger.warn('Token migration failed during init', {
-						error:
-							migrationError instanceof Error
-								? migrationError.message
-								: String(migrationError),
-					})
-				}
+				await kvToken.migrateIfNeeded(
+					{ clientId: this.props.clientId },
+					{ schwabUserId: this.props.schwabUserId },
+				)
+				this.mcpLogger.debug('[MyMCP.init] STEP 5C: Token migration completed')
 			}
 
 			// 3. Create SchwabApiClient AFTER tokens are loaded
