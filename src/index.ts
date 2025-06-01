@@ -24,7 +24,8 @@ import {
 import { gatherDiagnostics } from './shared/diagnostics'
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
 import { logger, LogLevel, configureLogger } from './shared/logger'
-import { registerMarketTools, registerTraderTools } from './tools'
+import { createTool, toolError, toolSuccess } from './shared/toolBuilder'
+import { allToolSpecs } from './tools/_registry'
 
 /**
  * DO props now contain only IDs needed for token key derivation
@@ -216,8 +217,25 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 			// 4. Register tools (this.server.tool calls are synchronous)
 			this.mcpLogger.debug('[MyMCP.init] STEP 7A: Calling registerTools...')
-			registerMarketTools(this.client, this.server)
-			registerTraderTools(this.client, this.server)
+			allToolSpecs.forEach((spec) => {
+				createTool(this.client, this.server, {
+					name: spec.name,
+					description: spec.description,
+					schema: spec.schema,
+					handler: async (params, c) => {
+						try {
+							const data = await spec.call(c, params)
+							return toolSuccess({
+								data,
+								source: spec.name,
+								message: `Successfully executed ${spec.name}`,
+							})
+						} catch (error) {
+							return toolError(error, { source: spec.name })
+						}
+					},
+				})
+			})
 			this.mcpLogger.debug('[MyMCP.init] STEP 7B: registerTools completed.')
 			this.mcpLogger.debug(
 				'[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY',

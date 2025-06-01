@@ -1,6 +1,4 @@
-import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
-	type SchwabApiClient,
 	GetAccountsRequestQueryParams,
 	GetOrdersRequestQueryParams,
 	GetQuotesRequestQueryParamsSchema,
@@ -13,20 +11,9 @@ import {
 	scrubAccountIdentifiers,
 } from '../../shared/accountScrubber'
 import { logger } from '../../shared/logger'
-import {
-	createTool,
-	toolError,
-	toolSuccess,
-} from '../../shared/toolBuilder'
+import { type ToolSpec } from '../types'
 
-interface ToolSpec<S extends z.ZodSchema> {
-	name: string
-	description: string
-	schema: S
-	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<unknown>
-}
-
-const TRADER_TOOLS = [
+export const toolSpecs: ToolSpec<z.ZodSchema>[] = [
 	{
 		name: 'getAccounts',
 		description: 'Get accounts',
@@ -39,11 +26,9 @@ const TRADER_TOOLS = [
 			const accounts = await c.trader.accounts.getAccounts({
 				queryParams: { fields: p?.fields },
 			})
-			const accountSummaries = accounts.map(
-				(acc: { securitiesAccount: Record<string, unknown> }) => ({
-					...acc.securitiesAccount,
-				}),
-			)
+			const accountSummaries = accounts.map((acc: any) => ({
+				...acc.securitiesAccount,
+			}))
 			return scrubAccountIdentifiers(accountSummaries, displayMap)
 		},
 	},
@@ -164,29 +149,4 @@ const TRADER_TOOLS = [
 			return scrubAccountIdentifiers(userPreference, displayMap)
 		},
 	},
-] as const satisfies readonly ToolSpec<z.ZodSchema>[]
-
-export function registerTraderTools(
-	client: SchwabApiClient,
-	server: McpServer,
-) {
-	TRADER_TOOLS.forEach((spec) => {
-		createTool(client, server, {
-			name: spec.name,
-			description: spec.description,
-			schema: spec.schema,
-			handler: async (params, c) => {
-				try {
-					const data = await spec.call(c, params)
-					return toolSuccess({
-						data,
-						source: spec.name,
-						message: `Successfully executed ${spec.name}`,
-					})
-				} catch (error) {
-					return toolError(error, { source: spec.name })
-				}
-			},
-		})
-	})
-}
+]

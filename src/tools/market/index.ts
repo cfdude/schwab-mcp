@@ -1,6 +1,4 @@
-import { type McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
-	type SchwabApiClient,
 	GetInstrumentsRequestQueryParamsSchema,
 	GetMarketHoursByMarketIdRequestParamsSchema,
 	GetMarketHoursRequestQueryParamsSchema,
@@ -9,20 +7,9 @@ import {
 	GetPriceHistoryRequestQueryParamsSchema,
 } from '@sudowealth/schwab-api'
 import type * as z from 'zod'
-import {
-	createTool,
-	toolError,
-	toolSuccess,
-} from '../../shared/toolBuilder'
+import { type ToolSpec } from '../types'
 
-interface ToolSpec<S extends z.ZodSchema> {
-	name: string
-	description: string
-	schema: S
-	call: (client: SchwabApiClient, params: z.infer<S>) => Promise<unknown>
-}
-
-const MARKET_TOOLS = [
+export const toolSpecs: ToolSpec<z.ZodSchema>[] = [
 	{
 		name: 'searchInstruments',
 		description: 'Search for instruments',
@@ -99,29 +86,4 @@ const MARKET_TOOLS = [
 				},
 			}),
 	},
-] as const satisfies readonly ToolSpec<z.ZodSchema>[]
-
-export function registerMarketTools(
-	client: SchwabApiClient,
-	server: McpServer,
-) {
-	MARKET_TOOLS.forEach((spec) => {
-		createTool(client, server, {
-			name: spec.name,
-			description: spec.description,
-			schema: spec.schema,
-			handler: async (params, c) => {
-				try {
-					const data = await spec.call(c, params)
-					return toolSuccess({
-						data,
-						source: spec.name,
-						message: `Successfully executed ${spec.name}`,
-					})
-				} catch (error) {
-					return toolError(error, { source: spec.name })
-				}
-			},
-		})
-	})
-}
+]
