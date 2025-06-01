@@ -1,8 +1,4 @@
-import { type SchwabApiClient } from '@sudowealth/schwab-api'
-
-declare global {
-	// Cached Schwab API client instance for reuse across requests
-	var __schwabClient: SchwabApiClient | undefined
-}
+// This file intentionally left empty
+// Global mutable state has been removed in favor of DO-local instance fields
 
 export {}

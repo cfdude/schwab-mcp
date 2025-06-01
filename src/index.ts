@@ -203,19 +203,15 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			}
 
 			// 3. Create SchwabApiClient AFTER tokens are loaded
-			const globalClient =
-				globalThis.__schwabClient ??
-				(globalThis.__schwabClient = createApiClient({
-					config: {
-						environment: ENVIRONMENTS.PRODUCTION,
-						logger: mcpLogger,
-						enableLogging: true,
-						logLevel: LOG_LEVELS.DEBUG,
-					},
-					auth: this.tokenManager,
-				}))
-
-			this.client = globalClient
+			this.client = createApiClient({
+				config: {
+					environment: ENVIRONMENTS.PRODUCTION,
+					logger: mcpLogger,
+					enableLogging: true,
+					logLevel: LOG_LEVELS.DEBUG,
+				},
+				auth: this.tokenManager,
+			})
 			this.mcpLogger.debug('[MyMCP.init] STEP 6: SchwabApiClient ready.')
 
 			// 4. Register tools (this.server.tool calls are synchronous)

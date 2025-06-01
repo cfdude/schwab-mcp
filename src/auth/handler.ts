@@ -255,16 +255,14 @@ app.get('/callback', async (c) => {
 				: 'unknown',
 		})
 
-		// Create (or reuse) API client
+		// Create API client (temporary for auth flow)
 		oauthLogger.info('Creating Schwab API client')
 		let client
 		try {
-			client =
-				globalThis.__schwabClient ??
-				(globalThis.__schwabClient = createApiClient({
-					config: { environment: 'PRODUCTION' },
-					auth,
-				}))
+			client = createApiClient({
+				config: { environment: 'PRODUCTION' },
+				auth,
+			})
 		} catch (clientError) {
 			oauthLogger.error('Failed to create API client', {
 				error: clientError,
