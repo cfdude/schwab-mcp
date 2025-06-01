@@ -23,7 +23,7 @@ import {
 } from './shared/constants'
 import { gatherDiagnostics } from './shared/diagnostics'
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
-import { makeLogger, LogLevel } from './shared/logger'
+import { logger, LogLevel, configureLogger } from './shared/logger'
 import { registerMarketTools, registerTraderTools } from './tools'
 
 /**
@@ -41,7 +41,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	private tokenManager!: EnhancedTokenManager
 	private client!: SchwabApiClient
 	private validatedConfig!: ValidatedEnv
-	private logger = makeLogger(LogLevel.Info).withContext(LOGGER_CONTEXTS.MCP_DO)
+	private mcpLogger = logger.child(LOGGER_CONTEXTS.MCP_DO)
 
 	server = new McpServer({
 		name: APP_NAME,
@@ -72,12 +72,12 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				logLevelStr.charAt(0).toUpperCase() + logLevelStr.slice(1).toLowerCase()
 			const logLevel =
 				LogLevel[logLevelPascal as keyof typeof LogLevel] ?? LogLevel.Info
-			// Update this instance's logger level
-			this.logger = makeLogger(logLevel).withContext(LOGGER_CONTEXTS.MCP_DO)
+			// Configure global logger level
+			configureLogger(logLevel)
 			const redirectUri = this.validatedConfig.SCHWAB_REDIRECT_URI
 
-			this.logger.debug('[MyMCP.init] STEP 0: Start')
-			this.logger.debug('[MyMCP.init] STEP 1: Env initialized.')
+			this.mcpLogger.debug('[MyMCP.init] STEP 0: Start')
+			this.mcpLogger.debug('[MyMCP.init] STEP 1: Env initialized.')
 
 			// Create KV token store - single source of truth
 			const kvToken = makeKvTokenStore(this.validatedConfig.OAUTH_KV)
@@ -94,7 +94,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			})
 
 			// Debug token IDs during initialization
-			this.logger.debug('[MyMCP.init] Token identifiers', {
+			this.mcpLogger.debug('[MyMCP.init] Token identifiers', {
 				schwabUserId: this.props.schwabUserId,
 				clientId: this.props.clientId,
 				hasSchwabUserId: !!this.props.schwabUserId,
@@ -104,7 +104,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			// Token save function uses KV store exclusively
 			const saveTokenForETM = async (tokenSet: TokenData) => {
 				await kvToken.save(getTokenIds(), tokenSet)
-				this.logger.debug('ETM: Token save to KV complete', {
+				this.mcpLogger.debug('ETM: Token save to KV complete', {
 					hasAccessToken: !!tokenSet.accessToken,
 					hasRefreshToken: !!tokenSet.refreshToken,
 					expiresAt: tokenSet.expiresAt
@@ -117,13 +117,13 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			// Token load function uses KV store exclusively
 			const loadTokenForETM = async (): Promise<TokenData | null> => {
 				const tokenIds = getTokenIds()
-				this.logger.debug('[ETM Load] Attempting to load token', {
+				this.mcpLogger.debug('[ETM Load] Attempting to load token', {
 					tokenIds,
 					expectedKey: kvToken.kvKey(tokenIds),
 				})
 
 				const tokenData = await kvToken.load(tokenIds)
-				this.logger.debug('ETM: Token load from KV complete', {
+				this.mcpLogger.debug('ETM: Token load from KV complete', {
 					hasAccessToken: !!tokenData?.accessToken,
 					hasRefreshToken: !!tokenData?.refreshToken,
 					expiresAt: tokenData?.expiresAt
@@ -137,13 +137,13 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				return tokenData
 			}
 
-			this.logger.debug(
+			this.mcpLogger.debug(
 				'[MyMCP.init] STEP 2: Storage and event handlers defined.',
 			)
 
 			// 1. Create ETM instance (synchronous)
 			const hadExistingTokenManager = !!this.tokenManager
-			this.logger.debug('[MyMCP.init] STEP 3A: ETM instance setup', {
+			this.mcpLogger.debug('[MyMCP.init] STEP 3A: ETM instance setup', {
 				hadExisting: hadExistingTokenManager,
 			})
 			if (!this.tokenManager) {
@@ -154,28 +154,28 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 					saveTokenForETM,
 				) // This is synchronous
 			}
-			this.logger.debug('[MyMCP.init] STEP 3B: ETM instance ready', {
+			this.mcpLogger.debug('[MyMCP.init] STEP 3B: ETM instance ready', {
 				wasReused: hadExistingTokenManager,
 			})
 
 			const mcpLogger: SchwabApiLogger = {
 				debug: (message: string, ...args: any[]) =>
-					this.logger.debug(message, args.length > 0 ? args[0] : undefined),
+					this.mcpLogger.debug(message, args.length > 0 ? args[0] : undefined),
 				info: (message: string, ...args: any[]) =>
-					this.logger.info(message, args.length > 0 ? args[0] : undefined),
+					this.mcpLogger.info(message, args.length > 0 ? args[0] : undefined),
 				warn: (message: string, ...args: any[]) =>
-					this.logger.warn(message, args.length > 0 ? args[0] : undefined),
+					this.mcpLogger.warn(message, args.length > 0 ? args[0] : undefined),
 				error: (message: string, ...args: any[]) =>
-					this.logger.error(message, args.length > 0 ? args[0] : undefined),
+					this.mcpLogger.error(message, args.length > 0 ? args[0] : undefined),
 			}
-			this.logger.debug('[MyMCP.init] STEP 4: MCP Logger adapted.')
+			this.mcpLogger.debug('[MyMCP.init] STEP 4: MCP Logger adapted.')
 
 			// 2. Proactively initialize ETM to load tokens BEFORE creating client
-			this.logger.debug(
+			this.mcpLogger.debug(
 				'[MyMCP.init] STEP 5A: Proactively calling this.tokenManager.initialize() (async)...',
 			)
 			const etmInitSuccess = this.tokenManager.initialize()
-			this.logger.debug(
+			this.mcpLogger.debug(
 				`[MyMCP.init] STEP 5B: Proactive ETM initialization complete. Success: ${etmInitSuccess}`,
 			)
 
@@ -186,11 +186,14 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 						{ clientId: this.props.clientId },
 						{ schwabUserId: this.props.schwabUserId },
 					)
-					this.logger.debug('[MyMCP.init] STEP 5C: Token migration attempt', {
-						success: migrateSuccess,
-					})
+					this.mcpLogger.debug(
+						'[MyMCP.init] STEP 5C: Token migration attempt',
+						{
+							success: migrateSuccess,
+						},
+					)
 				} catch (migrationError) {
-					this.logger.warn('Token migration failed during init', {
+					this.mcpLogger.warn('Token migration failed during init', {
 						error:
 							migrationError instanceof Error
 								? migrationError.message
@@ -213,16 +216,18 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				}))
 
 			this.client = globalClient
-			this.logger.debug('[MyMCP.init] STEP 6: SchwabApiClient ready.')
+			this.mcpLogger.debug('[MyMCP.init] STEP 6: SchwabApiClient ready.')
 
 			// 4. Register tools (this.server.tool calls are synchronous)
-			this.logger.debug('[MyMCP.init] STEP 7A: Calling registerTools...')
+			this.mcpLogger.debug('[MyMCP.init] STEP 7A: Calling registerTools...')
 			registerMarketTools(this.client, this.server)
 			registerTraderTools(this.client, this.server)
-			this.logger.debug('[MyMCP.init] STEP 7B: registerTools completed.')
-			this.logger.debug('[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY')
+			this.mcpLogger.debug('[MyMCP.init] STEP 7B: registerTools completed.')
+			this.mcpLogger.debug(
+				'[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY',
+			)
 		} catch (error: any) {
-			this.logger.error(
+			this.mcpLogger.error(
 				'[MyMCP.init] FINAL CATCH: UNHANDLED EXCEPTION in init()',
 				{
 					error: error.message,
@@ -234,28 +239,28 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	}
 
 	async onReconnect() {
-		this.logger.info('Handling reconnection in MyMCP instance')
+		this.mcpLogger.info('Handling reconnection in MyMCP instance')
 		try {
 			if (!this.tokenManager) {
-				this.logger.warn(
+				this.mcpLogger.warn(
 					'Token manager not initialized, attempting full initialization',
 				)
 				await this.init()
 				return true
 			}
-			this.logger.info('Attempting reconnection via token manager')
+			this.mcpLogger.info('Attempting reconnection via token manager')
 
 			try {
-				this.logger.info('Attempting to fetch access token as recovery test')
+				this.mcpLogger.info('Attempting to fetch access token as recovery test')
 				const token = await this.tokenManager.getAccessToken()
 				if (token) {
-					this.logger.info(
+					this.mcpLogger.info(
 						'Successfully retrieved access token during reconnection',
 					)
 					return true
 				}
 			} catch (tokenError) {
-				this.logger.warn('Failed to get access token during reconnection', {
+				this.mcpLogger.warn('Failed to get access token during reconnection', {
 					error:
 						tokenError instanceof Error
 							? tokenError.message
@@ -264,18 +269,18 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			}
 
 			try {
-				this.logger.info(
+				this.mcpLogger.info(
 					'Attempting proactive reinitialization of token manager',
 				)
 				const initResult = await this.tokenManager.initialize()
-				this.logger.info(
+				this.mcpLogger.info(
 					`Token manager reinitialization ${initResult ? 'succeeded' : 'failed'}`,
 				)
 				if (initResult) {
 					return true
 				}
 			} catch (initError) {
-				this.logger.warn('Token manager reinitialization failed', {
+				this.mcpLogger.warn('Token manager reinitialization failed', {
 					error:
 						initError instanceof Error ? initError.message : String(initError),
 				})
@@ -284,11 +289,11 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			let diagnostics = {}
 			try {
 				diagnostics = await this.getDiagnostics()
-				this.logger.info('Token diagnostics during reconnection recovery', {
+				this.mcpLogger.info('Token diagnostics during reconnection recovery', {
 					diagnostics,
 				})
 			} catch (diagError) {
-				this.logger.warn(
+				this.mcpLogger.warn(
 					'Failed to get diagnostics during reconnection recovery',
 					{
 						error:
@@ -299,7 +304,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				)
 			}
 
-			this.logger.warn(
+			this.mcpLogger.warn(
 				'Reconnection recovery attempts failed, performing full reinitialization',
 			)
 			await this.init()
@@ -307,12 +312,12 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			const stack = error instanceof Error ? error.stack : undefined
-			this.logger.error('Critical error during reconnection handling', {
+			this.mcpLogger.error('Critical error during reconnection handling', {
 				error: message,
 				stack,
 			})
 			try {
-				this.logger.warn(
+				this.mcpLogger.warn(
 					'Attempting emergency reinitialization after reconnection failure',
 				)
 				await this.init()
@@ -320,7 +325,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			} catch (initError) {
 				const initMessage =
 					initError instanceof Error ? initError.message : String(initError)
-				this.logger.error('Emergency reinitialization also failed', {
+				this.mcpLogger.error('Emergency reinitialization also failed', {
 					error: initMessage,
 				})
 				return false
@@ -329,7 +334,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	}
 
 	async onSSE(event: any) {
-		this.logger.info('SSE connection established or reconnected')
+		this.mcpLogger.info('SSE connection established or reconnected')
 		await this.onReconnect()
 		return await super.onSSE(event)
 	}

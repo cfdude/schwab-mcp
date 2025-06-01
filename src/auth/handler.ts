@@ -10,7 +10,7 @@ import { type Env } from '../../types/env'
 import { buildConfig } from '../config'
 import { LOGGER_CONTEXTS, APP_SERVER_NAME } from '../shared/constants'
 import { makeKvTokenStore } from '../shared/kvTokenStore'
-import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
+import { logger } from '../shared/logger'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
 import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
 import { mapSchwabError } from './errorMapping'
@@ -27,9 +27,7 @@ import { renderApprovalDialog } from './ui'
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>()
 
 // Create a scoped logger for OAuth handlers
-const logger = makeLogger(AppLogLevel.Info).withContext(
-	LOGGER_CONTEXTS.OAUTH_HANDLER,
-)
+const oauthLogger = logger.child(LOGGER_CONTEXTS.OAUTH_HANDLER)
 
 // No need to store config locally, we'll build it per request
 
@@ -49,7 +47,7 @@ app.get('/authorize', async (c) => {
 		if (!clientId) {
 			const error = createAuthError('MissingClientId')
 			const errorInfo = formatAuthError(error)
-			logger.error(errorInfo.message)
+			oauthLogger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(error)
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
@@ -79,7 +77,7 @@ app.get('/authorize', async (c) => {
 	} catch (error) {
 		const authError = createAuthError('AuthRequest')
 		const errorInfo = formatAuthError(authError, { error })
-		logger.error(errorInfo.message, { error })
+		oauthLogger.error(errorInfo.message, { error })
 		const jsonResponse = createJsonErrorResponse(authError)
 		return c.json(jsonResponse, errorInfo.status as any)
 	}
@@ -99,7 +97,7 @@ app.post('/authorize', async (c) => {
 		if (!state.oauthReqInfo) {
 			const error = createAuthError('MissingState')
 			const errorInfo = formatAuthError(error)
-			logger.error(errorInfo.message)
+			oauthLogger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(error)
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
@@ -116,7 +114,7 @@ app.post('/authorize', async (c) => {
 					scope: !authRequestForSchwab?.scope,
 				},
 			})
-			logger.error(errorInfo.message, errorInfo.details)
+			oauthLogger.error(errorInfo.message, errorInfo.details)
 			const jsonResponse = createJsonErrorResponse(
 				error,
 				undefined,
@@ -129,7 +127,7 @@ app.post('/authorize', async (c) => {
 	} catch (error) {
 		const authError = createAuthError('AuthApproval')
 		const errorInfo = formatAuthError(authError, { error })
-		logger.error(errorInfo.message, { error })
+		oauthLogger.error(errorInfo.message, { error })
 		const jsonResponse = createJsonErrorResponse(authError)
 		return c.json(jsonResponse, errorInfo.status as any)
 	}
@@ -155,7 +153,7 @@ app.get('/callback', async (c) => {
 				hasState: !!stateParam,
 				hasCode: !!code,
 			})
-			logger.error(errorInfo.message, errorInfo.details)
+			oauthLogger.error(errorInfo.message, errorInfo.details)
 			const jsonResponse = createJsonErrorResponse(
 				error,
 				undefined,
@@ -173,7 +171,7 @@ app.get('/callback', async (c) => {
 		if (!decodedStateAsAuthRequest) {
 			const error = createAuthError('InvalidState')
 			const errorInfo = formatAuthError(error)
-			logger.error(errorInfo.message)
+			oauthLogger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(error)
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
@@ -196,7 +194,7 @@ app.get('/callback', async (c) => {
 					'Decoded state object from Schwab callback is missing required AuthRequest fields (clientId, redirectUri, or scope).',
 				decodedState: decodedStateAsAuthRequest, // Log the problematic state
 			})
-			logger.error(errorInfo.message, errorInfo.details)
+			oauthLogger.error(errorInfo.message, errorInfo.details)
 			const jsonResponse = createJsonErrorResponse(
 				error,
 				undefined,
@@ -229,7 +227,7 @@ app.get('/callback', async (c) => {
 		)
 
 		// Exchange the code for tokens with enhanced error handling
-		logger.info(
+		oauthLogger.info(
 			'Exchanging authorization code for tokens with state parameter for PKCE',
 		)
 		let tokenSet
@@ -238,7 +236,7 @@ app.get('/callback', async (c) => {
 			// EnhancedTokenManager will handle extracting the code_verifier from it
 			tokenSet = await auth.exchangeCode(code, stateParam)
 		} catch (exchangeError) {
-			logger.error('Token exchange failed', {
+			oauthLogger.error('Token exchange failed', {
 				error: exchangeError,
 				message:
 					exchangeError instanceof Error
@@ -249,7 +247,7 @@ app.get('/callback', async (c) => {
 		}
 
 		// Log token information (without sensitive details)
-		logger.info('Token exchange successful', {
+		oauthLogger.info('Token exchange successful', {
 			hasAccessToken: !!tokenSet?.accessToken,
 			hasRefreshToken: !!tokenSet?.refreshToken,
 			expiresAt: tokenSet?.expiresAt
@@ -258,7 +256,7 @@ app.get('/callback', async (c) => {
 		})
 
 		// Create (or reuse) API client
-		logger.info('Creating Schwab API client')
+		oauthLogger.info('Creating Schwab API client')
 		let client
 		try {
 			client =
@@ -268,7 +266,7 @@ app.get('/callback', async (c) => {
 					auth,
 				}))
 		} catch (clientError) {
-			logger.error('Failed to create API client', {
+			oauthLogger.error('Failed to create API client', {
 				error: clientError,
 				message:
 					clientError instanceof Error
@@ -279,12 +277,12 @@ app.get('/callback', async (c) => {
 		}
 
 		// Fetch user info to get the Schwab user ID
-		logger.info('Fetching user preferences to get Schwab user ID')
+		oauthLogger.info('Fetching user preferences to get Schwab user ID')
 		let userPreferences
 		try {
 			userPreferences = await client.trader.userPreference.getUserPreference()
 		} catch (preferencesError) {
-			logger.error('Failed to fetch user preferences', {
+			oauthLogger.error('Failed to fetch user preferences', {
 				error: preferencesError,
 				message:
 					preferencesError instanceof Error
@@ -294,7 +292,7 @@ app.get('/callback', async (c) => {
 			throw createAuthError('NoUserId')
 		}
 
-		logger.debug('User preferences response', {
+		oauthLogger.debug('User preferences response', {
 			hasPreferences: !!userPreferences,
 			hasStreamerInfo: !!userPreferences?.streamerInfo,
 			streamerInfoCount: userPreferences?.streamerInfo?.length || 0,
@@ -306,7 +304,7 @@ app.get('/callback', async (c) => {
 		if (!userIdFromSchwab) {
 			const error = createAuthError('NoUserId')
 			const errorInfo = formatAuthError(error)
-			logger.error(errorInfo.message)
+			oauthLogger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(error)
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
@@ -319,18 +317,21 @@ app.get('/callback', async (c) => {
 			if (currentTokenData) {
 				// Save under schwabUserId key
 				await kvToken.save({ schwabUserId: userIdFromSchwab }, currentTokenData)
-				logger.info('Token migrated to schwabUserId key', {
+				oauthLogger.info('Token migrated to schwabUserId key', {
 					fromKey: kvToken.kvKey({ clientId: clientIdFromState }),
 					toKey: kvToken.kvKey({ schwabUserId: userIdFromSchwab }),
 				})
 			}
 		} catch (migrationError) {
-			logger.warn('Token migration failed, continuing with authorization', {
-				error:
-					migrationError instanceof Error
-						? migrationError.message
-						: String(migrationError),
-			})
+			oauthLogger.warn(
+				'Token migration failed, continuing with authorization',
+				{
+					error:
+						migrationError instanceof Error
+							? migrationError.message
+							: String(migrationError),
+				},
+			)
 		}
 
 		// Complete the authorization flow using the decoded AuthRequest object
@@ -397,7 +398,7 @@ app.get('/callback', async (c) => {
 			requestId,
 		})
 
-		logger.error(`Auth callback failed: ${errorInfo.message}`, {
+		oauthLogger.error(`Auth callback failed: ${errorInfo.message}`, {
 			...errorInfo.details,
 			errorType: mcpError.constructor.name,
 			...(requestId && { requestId }),

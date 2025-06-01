@@ -1,6 +1,6 @@
 import { type TokenData } from '@sudowealth/schwab-api'
 import { TOKEN_KEY_PREFIX, TTL_31_DAYS, LOGGER_CONTEXTS } from './constants'
-import { makeLogger, LogLevel as AppLogLevel } from './logger'
+import { logger } from './logger'
 
 /**
  * Token identifiers for KV key generation
@@ -31,7 +31,7 @@ interface KvTokenStore {
  */
 export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 	// Create a scoped logger for token store operations
-	const logger = makeLogger(AppLogLevel.Debug).withContext(LOGGER_CONTEXTS.KV_TOKEN_STORE)
+	const kvLogger = logger.child(LOGGER_CONTEXTS.KV_TOKEN_STORE)
 
 	/**
 	 * Generate consistent KV key from token identifiers
@@ -65,14 +65,14 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 				if (raw) {
 					usedKey = fallbackKey
 				}
-				logger.debug('Fallback key lookup completed', {
+				kvLogger.debug('Fallback key lookup completed', {
 					primaryKey,
 					fallbackKey,
 					foundInFallback: !!raw,
 				})
 			}
 
-			logger.debug('Token lookup result', {
+			kvLogger.debug('Token lookup result', {
 				primaryKey,
 				fallbackKey:
 					ids.schwabUserId && ids.clientId
@@ -86,14 +86,14 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 			}
 
 			const tokenData = JSON.parse(raw) as TokenData
-			logger.debug('Token loaded from KV', {
+			kvLogger.debug('Token loaded from KV', {
 				key: usedKey,
 				hasToken: !!tokenData.accessToken,
 				isPrimaryKey: usedKey === primaryKey,
 			})
 			return tokenData
 		} catch (error) {
-			logger.error('Failed to load token from KV', { error, ids })
+			kvLogger.error('Failed to load token from KV', { error, ids })
 			return null
 		}
 	}
@@ -111,9 +111,9 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 			const serialized = JSON.stringify(data)
 
 			await kv.put(key, serialized, { expirationTtl: TTL_31_DAYS })
-			logger.debug('Token saved to KV', { key, expiresAt: data.expiresAt })
+			kvLogger.debug('Token saved to KV', { key, expiresAt: data.expiresAt })
 		} catch (error) {
-			logger.error('Failed to save token to KV', { error, ids })
+			kvLogger.error('Failed to save token to KV', { error, ids })
 			throw error
 		}
 	}
@@ -131,14 +131,14 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 			const toKey = kvKey(toIds)
 
 			if (fromKey === toKey) {
-				logger.debug('Migration not needed - keys are identical', {
+				kvLogger.debug('Migration not needed - keys are identical', {
 					key: fromKey,
 				})
 				return true
 			}
 
 			const tokenData = await load(fromIds)
-			logger.debug('Migration source token lookup', {
+			kvLogger.debug('Migration source token lookup', {
 				fromKey,
 				tokenFound: !!tokenData,
 			})
@@ -147,14 +147,14 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 			}
 
 			await save(toIds, tokenData)
-			logger.info('Token migrated successfully', { fromKey, toKey })
+			kvLogger.info('Token migrated successfully', { fromKey, toKey })
 
 			// Don't delete the old key immediately - let it expire naturally
 			// This prevents issues if there are multiple DO instances
 
 			return true
 		} catch (error) {
-			logger.error('Token migration failed', { error, fromIds, toIds })
+			kvLogger.error('Token migration failed', { error, fromIds, toIds })
 			return false
 		}
 	}

@@ -70,10 +70,12 @@ interface LoggerState {
 	customRedactKeys: string[]
 }
 
-// Logger options for configuration
-interface LoggerOpts {
-	secretPatterns?: SecretPattern[]
-	redactKeys?: string[]
+// Child logger interface (without configuration methods)
+interface ChildLogger {
+	debug: (message: string, data?: any) => void
+	info: (message: string, data?: any) => void
+	warn: (message: string, data?: any) => void
+	error: (message: string, data?: any) => void
 }
 
 // Logger interface
@@ -82,48 +84,29 @@ interface Logger {
 	info: (message: string, data?: any, contextId?: string) => void
 	warn: (message: string, data?: any, contextId?: string) => void
 	error: (message: string, data?: any, contextId?: string) => void
-	withContext: (
-		contextId: string,
-	) => Omit<
-		Logger,
-		| 'withContext'
-		| 'setLevel'
-		| 'getLevel'
-		| 'configureRedactKeys'
-		| 'addRedactKeys'
-		| 'configureSecretPatterns'
-		| 'addSecretPatterns'
-		| 'addSecretPattern'
-		| 'child'
-	>
-	setLevel: (level: LogLevel) => void
-	getLevel: () => LogLevel
-	configureRedactKeys: (keys: string[]) => void
-	addRedactKeys: (keys: string[]) => void
-	configureSecretPatterns: (patterns: SecretPattern[]) => void
-	addSecretPatterns: (patterns: SecretPattern[]) => void
-	addSecretPattern: (pattern: RegExp, replacement: string) => void
-	child: (opts?: Partial<LoggerOpts>) => Logger
+	child: (contextId: string) => ChildLogger
+}
+
+// Get log level from environment or default to Info
+function getLevelFromEnv(): LogLevel {
+	const envLevel = process.env.LOG_LEVEL?.toUpperCase()
+	if (envLevel && envLevel in LogLevel) {
+		return LogLevel[envLevel as keyof typeof LogLevel] as LogLevel
+	}
+	return LogLevel.Info
+}
+
+// Singleton root state - mutable for configuration
+const rootState: LoggerState = {
+	currentLogLevel: getLevelFromEnv(),
+	customSecretPatterns: [],
+	customRedactKeys: [],
 }
 
 /**
- * Creates a logger instance with isolated state
- *
- * @param level The log level for this logger instance
- * @param opts Optional configuration for secret patterns and redact keys
- * @returns A logger instance with isolated configuration
+ * Builds the logger functionality with the given state
  */
-export function makeLogger(
-	level: LogLevel,
-	opts?: Partial<LoggerOpts>,
-): Logger {
-	// Create isolated state for this logger instance
-	const state: LoggerState = {
-		currentLogLevel: level,
-		customSecretPatterns: opts?.secretPatterns || [],
-		customRedactKeys: opts?.redactKeys || [],
-	}
-
+function buildLogger(state: LoggerState): Logger {
 	/**
 	 * Sanitizes log data to ensure no tokens or sensitive information is logged
 	 *
@@ -237,7 +220,7 @@ export function makeLogger(
 		}
 	}
 
-	// Return the logger instance with isolated state
+	// Return the logger instance
 	return {
 		debug: (message: string, data?: any, contextId?: string) =>
 			log(LogLevel.Debug, message, data, contextId),
@@ -248,8 +231,8 @@ export function makeLogger(
 		error: (message: string, data?: any, contextId?: string) =>
 			log(LogLevel.Error, message, data, contextId),
 
-		// Helper to create a context-aware logger that automatically includes the contextId
-		withContext: (contextId: string) => ({
+		// Create a child logger with a fixed context
+		child: (contextId: string): ChildLogger => ({
 			debug: (message: string, data?: any) =>
 				log(LogLevel.Debug, message, data, contextId),
 			info: (message: string, data?: any) =>
@@ -259,61 +242,19 @@ export function makeLogger(
 			error: (message: string, data?: any) =>
 				log(LogLevel.Error, message, data, contextId),
 		}),
-
-		// Configuration methods
-		setLevel: (level: LogLevel) => {
-			state.currentLogLevel = level
-		},
-
-		getLevel: () => state.currentLogLevel,
-
-		configureRedactKeys: (keys: string[]) => {
-			state.customRedactKeys = keys
-		},
-
-		addRedactKeys: (keys: string[]) => {
-			state.customRedactKeys = [...state.customRedactKeys, ...keys]
-		},
-
-		configureSecretPatterns: (patterns: SecretPattern[]) => {
-			state.customSecretPatterns = patterns
-		},
-
-		addSecretPatterns: (patterns: SecretPattern[]) => {
-			state.customSecretPatterns = [...state.customSecretPatterns, ...patterns]
-		},
-
-		addSecretPattern: (pattern: RegExp, replacement: string) => {
-			state.customSecretPatterns = [
-				...state.customSecretPatterns,
-				{ pattern, replacement },
-			]
-		},
-
-		// Create a child logger that inherits current configuration
-		child: (opts?: Partial<LoggerOpts>) => {
-			return makeLogger(state.currentLogLevel, {
-				secretPatterns: [
-					...state.customSecretPatterns,
-					...(opts?.secretPatterns || []),
-				],
-				redactKeys: [...state.customRedactKeys, ...(opts?.redactKeys || [])],
-			})
-		},
 	}
 }
 
-// Get log level from environment or default to Info
-function getLogLevelFromEnv(): LogLevel {
-	const envLevel = process.env.LOG_LEVEL?.toUpperCase()
-	if (envLevel && envLevel in LogLevel) {
-		return LogLevel[envLevel as keyof typeof LogLevel] as LogLevel
-	}
-	return LogLevel.Info
+// Create singleton logger instance
+export const logger = buildLogger(rootState)
+
+// Export the AppLogger type
+export type AppLogger = typeof logger
+
+/**
+ * Configure the global logger level
+ * @param level The new log level to set
+ */
+export function configureLogger(level: LogLevel) {
+	rootState.currentLogLevel = level
 }
-
-// Create singleton root logger instance
-const rootLogger = makeLogger(getLogLevelFromEnv())
-
-// Re-export the singleton logger instance
-export const logger = rootLogger

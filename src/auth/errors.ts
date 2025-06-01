@@ -1,5 +1,4 @@
 // Auth error definitions simplified using discriminated unions
-import { logger, LogLevel as AppLogLevel } from '../shared/logger'
 
 type AuthErrorKind =
 	| 'MissingClientId'
@@ -145,7 +144,7 @@ export function formatAuthError(
 	error: AuthError,
 	details?: Record<string, any>,
 ): ErrorResponse {
-	const includeStack = logger.getLevel() === AppLogLevel.Debug
+	const includeStack = process.env.LOG_LEVEL?.toLowerCase() === 'debug'
 	let filtered = details
 	if (details && !includeStack) {
 		const { stack, ...rest } = details

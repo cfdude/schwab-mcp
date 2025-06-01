@@ -13,15 +13,13 @@ import { type Context } from 'hono'
 import { type BlankInput } from 'hono/types'
 import { type ValidatedEnv, type Env } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
-import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
+import { logger } from '../shared/logger'
 import { createAuthError, formatAuthError } from './errors'
 import { encodeStateWithIntegrity } from './stateUtils'
 import { mapTokenPersistence } from './tokenPersistence'
 
 // Create scoped logger for auth client
-const logger = makeLogger(AppLogLevel.Info).withContext(
-	LOGGER_CONTEXTS.AUTH_CLIENT,
-)
+const authLogger = logger.child(LOGGER_CONTEXTS.AUTH_CLIENT)
 
 /**
  * Creates a Schwab Auth client with enhanced features
@@ -40,9 +38,9 @@ export function initializeSchwabAuthClient(
 	const clientId = config.SCHWAB_CLIENT_ID
 	const clientSecret = config.SCHWAB_CLIENT_SECRET
 
-	logger.debug('Using centralized environment for Schwab Auth client')
+	authLogger.debug('Using centralized environment for Schwab Auth client')
 
-	logger.info('Initializing enhanced Schwab Auth client', {
+	authLogger.info('Initializing enhanced Schwab Auth client', {
 		hasLoadFunction: !!load,
 		hasSaveFunction: !!save,
 	})
@@ -127,7 +125,7 @@ export async function redirectToSchwab(
 	} catch (error) {
 		const authError = createAuthError('AuthUrl')
 		const errorInfo = formatAuthError(authError, { error })
-		logger.error(errorInfo.message, { error })
+		authLogger.error(errorInfo.message, { error })
 		return new Response(errorInfo.message, { status: errorInfo.status })
 	}
 }

@@ -2,13 +2,11 @@ import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
 import { safeBase64Decode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
-import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
+import { logger } from '../shared/logger'
 import { createAuthError } from './errors'
 
 // Create scoped logger for OAuth state operations
-const logger = makeLogger(AppLogLevel.Info).withContext(
-	LOGGER_CONTEXTS.STATE_UTILS,
-)
+const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
 
 /**
  * IMPORTANT: EnhancedTokenManager State Handling
@@ -105,7 +103,7 @@ async function verifyHmacSignature(
 		)
 	} catch (e) {
 		// If decoding fails, signature is invalid
-		logger.error('[ERROR] Error in verifyHmacSignature:', e)
+		stateLogger.error('[ERROR] Error in verifyHmacSignature:', e)
 		return false
 	}
 }
@@ -171,7 +169,7 @@ export async function decodeAndVerifyState(
 				)
 
 				if (!isValid) {
-					logger.error('[ERROR] State HMAC signature verification failed')
+					stateLogger.error('[ERROR] State HMAC signature verification failed')
 					return null
 				}
 
@@ -181,7 +179,7 @@ export async function decodeAndVerifyState(
 			}
 		} catch {
 			// Fall back to legacy format without HMAC for backward compatibility
-			logger.info('State not in signed format, trying legacy decoding')
+			stateLogger.info('State not in signed format, trying legacy decoding')
 		}
 
 		// Legacy format: direct base64 encoded JSON
@@ -189,11 +187,17 @@ export async function decodeAndVerifyState(
 			const decodedState = safeBase64Decode(decodedParam)
 			return JSON.parse(decodedState) as AuthRequest
 		} catch (error) {
-			logger.error('[ERROR] Error in base64 decoding or JSON parsing:', error)
+			stateLogger.error(
+				'[ERROR] Error in base64 decoding or JSON parsing:',
+				error,
+			)
 			return null
 		}
 	} catch (error) {
-		logger.error('[ERROR] Error decoding state in decodeAndVerifyState:', error)
+		stateLogger.error(
+			'[ERROR] Error decoding state in decodeAndVerifyState:',
+			error,
+		)
 		return null
 	}
 }

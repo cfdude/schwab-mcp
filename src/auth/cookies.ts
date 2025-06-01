@@ -5,7 +5,7 @@ import {
 	COOKIE_NAMES,
 	HTTP_HEADERS,
 } from '../shared/constants'
-import { makeLogger, LogLevel as AppLogLevel } from '../shared/logger'
+import { logger } from '../shared/logger'
 import { createAuthError } from './errors'
 import {
 	decodeAndVerifyState,
@@ -14,7 +14,7 @@ import {
 } from './stateUtils'
 
 // Create scoped logger for cookie operations
-const logger = makeLogger(AppLogLevel.Info).withContext(LOGGER_CONTEXTS.COOKIES)
+const cookieLogger = logger.child(LOGGER_CONTEXTS.COOKIES)
 
 const MCP_APPROVAL = COOKIE_NAMES.APPROVED_CLIENTS
 const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365
@@ -41,7 +41,7 @@ function toHex(ab: ArrayBuffer) {
 function fromHex(hexString: string): ArrayBuffer {
 	// Validate hex string format
 	if (!/^[0-9a-fA-F]*$/.test(hexString)) {
-		logger.warn('Invalid hex string format detected')
+		cookieLogger.warn('Invalid hex string format detected')
 		throw new Error('Invalid hex string format')
 	}
 
@@ -108,7 +108,7 @@ async function verifySignature(
 			enc.encode(data),
 		)
 	} catch (e) {
-		logger.error('Error verifying signature:', e)
+		cookieLogger.error('Error verifying signature:', e)
 		return false
 	}
 }
@@ -149,7 +149,7 @@ async function verifyAndDecodeCookie<T>(
 	const parts = cookieValue.split('.')
 	if (parts.length !== 2) {
 		const error = createAuthError('InvalidCookieFormat')
-		logger.warn(error.message)
+		cookieLogger.warn(error.message)
 		return undefined
 	}
 
@@ -164,26 +164,26 @@ async function verifyAndDecodeCookie<T>(
 		// base64Payload must be a string because it comes from parts[1]
 		// and we've already checked that parts.length === 2
 		if (typeof base64Payload !== 'string') {
-			logger.warn('Invalid base64 payload format: not a string')
+			cookieLogger.warn('Invalid base64 payload format: not a string')
 			return undefined
 		}
 		payloadString = safeBase64Decode(base64Payload)
 	} catch (e) {
-		logger.warn('Invalid base64 payload in cookie:', e)
+		cookieLogger.warn('Invalid base64 payload in cookie:', e)
 		return undefined
 	}
 
 	// Step 2: Verify HMAC signature before parsing JSON
 	const key = await importKey(secret)
 	if (typeof signatureHex !== 'string') {
-		logger.warn('Invalid signature format: not a string')
+		cookieLogger.warn('Invalid signature format: not a string')
 		return undefined
 	}
 	const isValid = await verifySignature(key, signatureHex, payloadString)
 
 	if (!isValid) {
 		const error = createAuthError('CookieSignature')
-		logger.warn(error.message)
+		cookieLogger.warn(error.message)
 		return undefined
 	}
 
@@ -191,7 +191,7 @@ async function verifyAndDecodeCookie<T>(
 	try {
 		return JSON.parse(payloadString) as T
 	} catch (e) {
-		logger.error('Error parsing cookie payload:', e)
+		cookieLogger.error('Error parsing cookie payload:', e)
 		return undefined
 	}
 }
@@ -240,13 +240,13 @@ async function parseApprovalCookie(
 	// Additional validation for array content
 	if (approvedClients) {
 		if (!Array.isArray(approvedClients)) {
-			logger.warn('Cookie payload is not an array.')
+			cookieLogger.warn('Cookie payload is not an array.')
 			return undefined
 		}
 
 		// Ensure all elements are strings
 		if (!approvedClients.every((item) => typeof item === 'string')) {
-			logger.warn('Cookie payload contains non-string elements.')
+			cookieLogger.warn('Cookie payload contains non-string elements.')
 			return undefined
 		}
 	}
@@ -339,7 +339,7 @@ export async function parseRedirectApproval(
 		state = decodedState
 		clientId = extractClientIdFromState(state)
 	} catch (e) {
-		logger.error('Error processing form submission:', e)
+		cookieLogger.error('Error processing form submission:', e)
 		// Rethrow with centralized error format
 		throw new Error(
 			`Failed to parse approval form: ${e instanceof Error ? e.message : String(e)}`,
