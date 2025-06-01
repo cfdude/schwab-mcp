@@ -25,7 +25,7 @@ import { gatherDiagnostics } from './shared/diagnostics'
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
 import { logger, buildLogger, type PinoLogLevel } from './shared/log'
 import { createTool, toolError, toolSuccess } from './shared/toolBuilder'
-import { allToolSpecs } from './tools/_registry'
+import { allToolSpecs, type ToolSpec } from './tools'
 
 /**
  * DO props now contain only IDs needed for token key derivation
@@ -199,7 +199,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 			// 4. Register tools (this.server.tool calls are synchronous)
 			this.mcpLogger.debug('[MyMCP.init] STEP 7A: Calling registerTools...')
-			allToolSpecs.forEach((spec) => {
+			allToolSpecs.forEach((spec: ToolSpec<any>) => {
 				createTool(this.client, this.server, {
 					name: spec.name,
 					description: spec.description,

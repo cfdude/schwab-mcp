@@ -40,12 +40,17 @@ function formatResponse(response: ToolResponse): McpContentArray {
 				('message' in response && response.message) ||
 				(dataToLog && (dataToLog as any).message) ||
 				'Operation successful'
-			return {
-				content: [
-					{ type: 'text', text: message },
-					{ type: 'text', text: JSON.stringify(dataToLog, null, 2) },
-				],
+
+			const content: Array<{ type: string; text: string }> = [
+				{ type: 'text', text: message },
+			]
+
+			// Only add data if it exists and isn't redundant with message
+			if (dataToLog !== null && dataToLog !== undefined) {
+				content.push({ type: 'text', text: JSON.stringify(dataToLog, null, 2) })
 			}
+
+			return { content }
 		} else {
 			let errorMessage = 'An error occurred'
 			if ('error' in response && response.error) {
