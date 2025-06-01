@@ -4,7 +4,7 @@ import { type ValidatedEnv } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/log'
 import { AuthErrors } from './errors'
-import * as jwt from './jwt'
+import { signState, verifyState } from './utils/jwt'
 
 // Create scoped logger for OAuth state operations
 const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
@@ -43,7 +43,7 @@ export async function encodeStateWithIntegrity<T = AuthRequest>(
 	config: ValidatedEnv,
 	state: T,
 ): Promise<string> {
-	return await jwt.sign(config.COOKIE_ENCRYPTION_KEY, state as Record<string, unknown>)
+	return await signState(config.COOKIE_ENCRYPTION_KEY, state as Record<string, unknown>)
 }
 
 /**
@@ -69,7 +69,7 @@ export async function decodeAndVerifyState<T = AuthRequest>(
 
 		// Try to decode as JWT format first
 		try {
-			return await jwt.verify<Record<string, unknown>>(
+			return await verifyState<Record<string, unknown>>(
 				config.COOKIE_ENCRYPTION_KEY,
 				decodedParam,
 			) as T
