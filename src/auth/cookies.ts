@@ -26,10 +26,8 @@ const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365
  * Converts an ArrayBuffer to a hex string
  * Uses Buffer in Node.js-compatible environments (enabled with nodejs_compat)
  */
-function toHex(ab: ArrayBuffer) {
-	return [...new Uint8Array(ab)]
-		.map((x) => x.toString(16).padStart(2, '0'))
-		.join('')
+function toHex(ab: ArrayBuffer): string {
+	return Buffer.from(ab).toString('hex')
 }
 
 /**
@@ -40,14 +38,13 @@ function toHex(ab: ArrayBuffer) {
  * @returns ArrayBuffer representation of the hex string
  */
 function fromHex(hexString: string): ArrayBuffer {
-	// Validate hex string format
-	if (!/^[0-9a-fA-F]*$/.test(hexString)) {
-		cookieLogger.warn('Invalid hex string format detected')
+	// Buffer.from validates hex string format internally
+	try {
+		return Buffer.from(hexString, 'hex').buffer
+	} catch {
+		cookieLogger.warn('Invalid hex string format detected', { hexString })
 		throw new Error('Invalid hex string format')
 	}
-
-	// Using Buffer is more standard when available in the Workers environment
-	return Buffer.from(hexString, 'hex').buffer
 }
 
 /**
