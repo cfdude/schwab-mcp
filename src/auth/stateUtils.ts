@@ -4,6 +4,7 @@ import { type ValidatedEnv } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/log'
 import { AuthErrors } from './errors'
+import { StateSchema, type StateData as StateDataFromSchema } from './schemas'
 import { signState, verifyState } from './utils/jwt'
 
 // Create scoped logger for OAuth state operations
@@ -26,13 +27,9 @@ const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
  */
 
 /**
- * Interface for structured state data
+ * Re-export StateData type from schemas
  */
-export interface StateData extends Record<string, unknown> {
-	clientId?: string
-	userId?: string
-	oauthReqInfo?: AuthRequest
-}
+export type StateData = StateDataFromSchema
 
 /**
  * Encodes state with integrity protection using JWT
@@ -43,7 +40,10 @@ export async function encodeStateWithIntegrity<T = AuthRequest>(
 	config: ValidatedEnv,
 	state: T,
 ): Promise<string> {
-	return await signState(config.COOKIE_ENCRYPTION_KEY, state as Record<string, unknown>)
+	return await signState(
+		config.COOKIE_ENCRYPTION_KEY,
+		state as Record<string, unknown>,
+	)
 }
 
 /**
@@ -69,10 +69,12 @@ export async function decodeAndVerifyState<T = AuthRequest>(
 
 		// Try to decode as JWT format first
 		try {
-			return await verifyState<Record<string, unknown>>(
+			const payload = await verifyState<Record<string, unknown>>(
 				config.COOKIE_ENCRYPTION_KEY,
 				decodedParam,
-			) as T
+			)
+			// Validate with Zod schema
+			return StateSchema.parse(payload) as T
 		} catch (jwtError) {
 			// If JWT verification fails, try legacy format
 			stateLogger.info(
@@ -84,7 +86,9 @@ export async function decodeAndVerifyState<T = AuthRequest>(
 		// Legacy format: direct base64 encoded JSON
 		try {
 			const decodedState = safeBase64Decode(decodedParam)
-			return JSON.parse(decodedState) as T
+			const parsed = JSON.parse(decodedState)
+			// Validate with Zod schema
+			return StateSchema.parse(parsed) as T
 		} catch (error) {
 			stateLogger.error(
 				'[ERROR] Error in base64 decoding or JSON parsing:',
@@ -108,12 +112,14 @@ export async function decodeAndVerifyState<T = AuthRequest>(
  * @returns The client ID from the state.
  * @throws Error if client ID cannot be extracted.
  */
-export function extractClientIdFromState(state: StateData | AuthRequest): string {
+export function extractClientIdFromState(
+	state: StateData | AuthRequest,
+): string {
 	// Handle AuthRequest objects directly
 	if ('clientId' in state && typeof state.clientId === 'string') {
 		return state.clientId
 	}
-	
+
 	// Handle StateData objects
 	const stateData = state as StateData
 	const clientId = stateData.clientId || stateData.oauthReqInfo?.clientId

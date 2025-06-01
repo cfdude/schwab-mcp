@@ -16,9 +16,9 @@ export interface TokenIdentifiers {
  * Single source of truth for OAuth tokens, eliminating dual storage
  * in DO props and KV that can lead to token divergence.
  */
-interface KvTokenStore {
-	load(ids: TokenIdentifiers): Promise<TokenData | null>
-	save(ids: TokenIdentifiers, data: TokenData): Promise<void>
+export interface KvTokenStore<T extends TokenData = TokenData> {
+	load(ids: TokenIdentifiers): Promise<T | null>
+	save(ids: TokenIdentifiers, data: T): Promise<void>
 	kvKey(ids: TokenIdentifiers): string
 	migrate(fromIds: TokenIdentifiers, toIds: TokenIdentifiers): Promise<boolean>
 	migrateIfNeeded(
@@ -33,7 +33,9 @@ interface KvTokenStore {
  * @param kv KV namespace for token storage
  * @returns Token store interface for load/save operations
  */
-export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
+export function makeKvTokenStore<T extends TokenData = TokenData>(
+	kv: KVNamespace,
+): KvTokenStore<T> {
 	// Create a scoped logger for token store operations
 	const kvLogger = logger.child(LOGGER_CONTEXTS.KV_TOKEN_STORE)
 
@@ -55,7 +57,7 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 	 * Load token data from KV store
 	 * Tries schwabUserId key first, then falls back to clientId key
 	 */
-	const load = async (ids: TokenIdentifiers): Promise<TokenData | null> => {
+	const load = async (ids: TokenIdentifiers): Promise<T | null> => {
 		try {
 			// Try primary key first (schwabUserId preferred, or clientId if no schwabUserId)
 			const primaryKey = kvKey(ids)
@@ -89,7 +91,7 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 				return null
 			}
 
-			const tokenData = JSON.parse(raw) as TokenData
+			const tokenData = JSON.parse(raw) as T
 			kvLogger.debug('Token loaded from KV', {
 				key: usedKey,
 				hasToken: !!tokenData.accessToken,
@@ -108,7 +110,7 @@ export function makeKvTokenStore(kv: KVNamespace): KvTokenStore {
 	 */
 	const save = async (
 		ids: TokenIdentifiers,
-		data: TokenData,
+		data: T,
 	): Promise<void> => {
 		try {
 			const key = kvKey(ids)

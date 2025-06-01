@@ -7,6 +7,7 @@ import {
 } from '../shared/constants'
 import { logger } from '../shared/log'
 import { AuthErrors } from './errors'
+import { ApprovedClientsSchema } from './schemas'
 import {
 	decodeAndVerifyState,
 	extractClientIdFromState,
@@ -237,16 +238,12 @@ async function parseApprovalCookie(
 		secret,
 	)
 
-	// Additional validation for array content
+	// Validate with Zod schema
 	if (approvedClients) {
-		if (!Array.isArray(approvedClients)) {
-			cookieLogger.warn('Cookie payload is not an array.')
-			return undefined
-		}
-
-		// Ensure all elements are strings
-		if (!approvedClients.every((item) => typeof item === 'string')) {
-			cookieLogger.warn('Cookie payload contains non-string elements.')
+		try {
+			return ApprovedClientsSchema.parse(approvedClients)
+		} catch (e) {
+			cookieLogger.warn('Cookie payload validation failed:', e)
 			return undefined
 		}
 	}
@@ -332,7 +329,10 @@ export async function parseRedirectApproval(
 		}
 
 		encodedState = stateParam
-		const decodedState = await decodeAndVerifyState<StateData>(config, encodedState)
+		const decodedState = await decodeAndVerifyState<StateData>(
+			config,
+			encodedState,
+		)
 		if (!decodedState) {
 			throw new AuthErrors.InvalidState()
 		}
