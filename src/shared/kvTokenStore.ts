@@ -1,6 +1,6 @@
 import { type TokenData } from '@sudowealth/schwab-api'
-import { TOKEN_KEY_PREFIX, TTL_31_DAYS, LOGGER_CONTEXTS } from './constants'
-import { logger } from './log'
+import pino from 'pino'
+import { TOKEN_KEY_PREFIX, TTL_31_DAYS } from './constants'
 
 /**
  * Token identifiers for KV key generation
@@ -36,8 +36,8 @@ export interface KvTokenStore<T extends TokenData = TokenData> {
 export function makeKvTokenStore<T extends TokenData = TokenData>(
 	kv: KVNamespace,
 ): KvTokenStore<T> {
-	// Create a scoped logger for token store operations
-	const kvLogger = logger.child(LOGGER_CONTEXTS.KV_TOKEN_STORE)
+	// Create a Pino child logger for token store operations
+	const kvLogger = pino().child({ contextId: 'kv-token-store' })
 
 	/**
 	 * Generate consistent KV key from token identifiers
@@ -61,8 +61,12 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 		try {
 			// Build list of keys to check
 			const keysToCheck: string[] = []
-			const schwabUserKey = ids.schwabUserId ? `${TOKEN_KEY_PREFIX}${ids.schwabUserId}` : null
-			const clientKey = ids.clientId ? `${TOKEN_KEY_PREFIX}${ids.clientId}` : null
+			const schwabUserKey = ids.schwabUserId
+				? `${TOKEN_KEY_PREFIX}${ids.schwabUserId}`
+				: null
+			const clientKey = ids.clientId
+				? `${TOKEN_KEY_PREFIX}${ids.clientId}`
+				: null
 
 			if (schwabUserKey) keysToCheck.push(schwabUserKey)
 			if (clientKey && clientKey !== schwabUserKey) keysToCheck.push(clientKey)
@@ -75,13 +79,13 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 
 			// Read all keys in parallel
 			const results = await Promise.all(
-				keysToCheck.map(key => kv.get(key).then(value => ({ key, value })))
+				keysToCheck.map((key) => kv.get(key).then((value) => ({ key, value }))),
 			)
 
 			// Find the first non-null result, prioritizing schwabUserId
 			let tokenData: T | null = null
 			let sourceKey: string | null = null
-			
+
 			for (const { key, value } of results) {
 				if (value) {
 					tokenData = JSON.parse(value) as T
@@ -90,32 +94,49 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 				}
 			}
 
-			kvLogger.debug('Token lookup result', {
-				keysChecked: keysToCheck,
-				found: !!tokenData,
-				sourceKey: sourceKey || 'none',
-			})
+			kvLogger.debug(
+				{
+					keysChecked: keysToCheck,
+					found: !!tokenData,
+					sourceKey: sourceKey || 'none',
+				},
+				'Token lookup result',
+			)
 
 			// If we found a token under clientId but have a schwabUserId, migrate it
-			if (tokenData && sourceKey === clientKey && schwabUserKey && clientKey && schwabUserKey !== sourceKey) {
-				kvLogger.info('Migrating token from clientId to schwabUserId key', {
-					fromKey: clientKey,
-					toKey: schwabUserKey,
-				})
-				
+			if (
+				tokenData &&
+				sourceKey === clientKey &&
+				schwabUserKey &&
+				clientKey &&
+				schwabUserKey !== sourceKey
+			) {
+				kvLogger.info(
+					{
+						fromKey: clientKey,
+						toKey: schwabUserKey,
+					},
+					'Migrating token from clientId to schwabUserId key',
+				)
+
 				// Atomically migrate: put to new key, then delete old key
-				await kv.put(schwabUserKey, JSON.stringify(tokenData), { expirationTtl: TTL_31_DAYS })
-				await kv.delete(clientKey)
-				
-				kvLogger.debug('Token migration completed', {
-					fromKey: clientKey,
-					toKey: schwabUserKey,
+				await kv.put(schwabUserKey, JSON.stringify(tokenData), {
+					expirationTtl: TTL_31_DAYS,
 				})
+				await kv.delete(clientKey)
+
+				kvLogger.debug(
+					{
+						fromKey: clientKey,
+						toKey: schwabUserKey,
+					},
+					'Token migration completed',
+				)
 			}
 
 			return tokenData
 		} catch (error) {
-			kvLogger.error('Failed to load token from KV', { error, ids })
+			kvLogger.error({ error, ids }, 'Failed to load token from KV')
 			return null
 		}
 	}
@@ -124,18 +145,15 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 	 * Save token data to KV store atomically
 	 * Complete TokenData is written in single operation to prevent divergence
 	 */
-	const save = async (
-		ids: TokenIdentifiers,
-		data: T,
-	): Promise<void> => {
+	const save = async (ids: TokenIdentifiers, data: T): Promise<void> => {
 		try {
 			const key = kvKey(ids)
 			const serialized = JSON.stringify(data)
 
 			await kv.put(key, serialized, { expirationTtl: TTL_31_DAYS })
-			kvLogger.debug('Token saved to KV', { key, expiresAt: data.expiresAt })
+			kvLogger.debug({ key, expiresAt: data.expiresAt }, 'Token saved to KV')
 		} catch (error) {
-			kvLogger.error('Failed to save token to KV', { error, ids })
+			kvLogger.error({ error, ids }, 'Failed to save token to KV')
 			throw error
 		}
 	}
@@ -143,6 +161,7 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 	/**
 	 * Migrate token from one key to another
 	 * Returns true if migration was successful
+	 * Implements idempotent migration to prevent race conditions between multiple DO instances
 	 */
 	const migrate = async (
 		fromIds: TokenIdentifiers,
@@ -153,33 +172,73 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			const toKey = kvKey(toIds)
 
 			if (fromKey === toKey) {
-				kvLogger.debug('Migration not needed - keys are identical', {
-					key: fromKey,
-				})
+				kvLogger.debug(
+					{
+						key: fromKey,
+					},
+					'Migration not needed - keys are identical',
+				)
 				return true
+			}
+
+			// First check if destination already exists to avoid race conditions
+			const existingAtDestination = await kv.get(toKey)
+			if (existingAtDestination) {
+				kvLogger.debug(
+					{ toKey },
+					'Migration skipped - token already exists at destination',
+				)
+				// If token exists at destination, clean up source silently
+				try {
+					await kv.delete(fromKey)
+				} catch (deleteError) {
+					kvLogger.debug(
+						{
+							fromKey,
+							error: deleteError,
+						},
+						'Source cleanup after existing destination failed',
+					)
+				}
+				return false
 			}
 
 			// Read the token directly from the source key
 			const raw = await kv.get(fromKey)
 			if (!raw) {
-				kvLogger.debug('Migration source token not found', { fromKey })
+				kvLogger.debug({ fromKey }, 'Migration source token not found')
 				return false
 			}
 
 			const tokenData = JSON.parse(raw) as T
-			kvLogger.debug('Migration source token found', {
-				fromKey,
-				hasToken: !!tokenData.accessToken,
-			})
+			kvLogger.debug(
+				{
+					fromKey,
+					hasToken: !!tokenData.accessToken,
+				},
+				'Migration source token found',
+			)
 
-			// Atomically migrate: put to new key, then delete old key
+			// Atomically migrate: put to new key first
 			await kv.put(toKey, raw, { expirationTtl: TTL_31_DAYS })
-			await kv.delete(fromKey)
-			
-			kvLogger.info('Token migrated successfully', { fromKey, toKey })
+
+			// Then delete old key - if this fails due to race condition, log but continue
+			try {
+				await kv.delete(fromKey)
+			} catch (deleteError) {
+				kvLogger.debug(
+					{
+						fromKey,
+						error: deleteError,
+					},
+					'Source key deletion may have raced with another instance',
+				)
+			}
+
+			kvLogger.info({ fromKey, toKey }, 'Token migrated successfully')
 			return true
 		} catch (error) {
-			kvLogger.error('Token migration failed', { error, fromIds, toIds })
+			kvLogger.error({ error, fromIds, toIds }, 'Token migration failed')
 			return false
 		}
 	}
@@ -194,20 +253,26 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 	): Promise<void> => {
 		try {
 			const migrateSuccess = await migrate(fromIds, toIds)
-			kvLogger.debug('Migration attempt completed', {
-				success: migrateSuccess,
-				fromKey: kvKey(fromIds),
-				toKey: kvKey(toIds),
-			})
+			kvLogger.debug(
+				{
+					success: migrateSuccess,
+					fromKey: kvKey(fromIds),
+					toKey: kvKey(toIds),
+				},
+				'Migration attempt completed',
+			)
 		} catch (migrationError) {
-			kvLogger.warn('Token migration failed during migrateIfNeeded', {
-				error:
-					migrationError instanceof Error
-						? migrationError.message
-						: String(migrationError),
-				fromIds,
-				toIds,
-			})
+			kvLogger.warn(
+				{
+					error:
+						migrationError instanceof Error
+							? migrationError.message
+							: String(migrationError),
+					fromIds,
+					toIds,
+				},
+				'Token migration failed during migrateIfNeeded',
+			)
 		}
 	}
 
