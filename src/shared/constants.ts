@@ -29,6 +29,7 @@ export const LOGGER_CONTEXTS = {
 	AUTH_CLIENT: 'auth-client',
 	STATE_UTILS: 'state-utils',
 	KV_TOKEN_STORE: 'kv-token-store',
+	JWT: 'jwt',
 } as const
 
 /**

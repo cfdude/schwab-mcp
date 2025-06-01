@@ -4,6 +4,7 @@ import { type ValidatedEnv } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/logger'
 import { AuthErrors } from './errors'
+import * as jwt from './jwt'
 
 // Create scoped logger for OAuth state operations
 const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
@@ -24,15 +25,6 @@ const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
  * - Our decodeAndVerifyState still works to extract application data after ETM processing
  */
 
-/**
- * Interface for the state envelope structure
- * This provides a symmetric format for encoding and decoding
- */
-interface StateEnvelope {
-	data: string // base64 JSON
-	signature: string // base64 HMAC
-	version: 1 // bump when format changes
-}
 
 /**
  * Interface for structured state data
@@ -44,99 +36,22 @@ export interface StateData {
 	[key: string]: any
 }
 
-/**
- * Creates an HMAC signature for state integrity verification
- * @param data - The data to sign
- * @param secret - The secret key for HMAC
- * @returns Base64 encoded HMAC signature
- */
-async function createHmacSignature(
-	data: string,
-	secret: string,
-): Promise<string> {
-	const encoder = new TextEncoder()
-	const key = await crypto.subtle.importKey(
-		'raw',
-		encoder.encode(secret),
-		{ name: 'HMAC', hash: 'SHA-256' },
-		false,
-		['sign'],
-	)
-
-	const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data))
-	return btoa(String.fromCharCode(...new Uint8Array(signature)))
-}
 
 /**
- * Verifies the HMAC signature of the state data using timing-safe comparison
- * @param data - The data to verify
- * @param signature - The signature to verify against
- * @param secret - The secret key for HMAC
- * @returns True if signature is valid
- */
-async function verifyHmacSignature(
-	data: string,
-	signature: string,
-	secret: string,
-): Promise<boolean> {
-	const encoder = new TextEncoder()
-	const key = await crypto.subtle.importKey(
-		'raw',
-		encoder.encode(secret),
-		{ name: 'HMAC', hash: 'SHA-256' },
-		false,
-		['verify'],
-	)
-
-	// Decode the base64 signature to get the raw bytes
-	try {
-		const signatureBytes = Uint8Array.from(atob(signature), (c) =>
-			c.charCodeAt(0),
-		)
-
-		// Use crypto.subtle.verify for timing-safe comparison
-		return await crypto.subtle.verify(
-			'HMAC',
-			key,
-			signatureBytes,
-			encoder.encode(data),
-		)
-	} catch (e) {
-		// If decoding fails, signature is invalid
-		stateLogger.error('[ERROR] Error in verifyHmacSignature:', e)
-		return false
-	}
-}
-
-/**
- * Encodes state with integrity protection using HMAC
+ * Encodes state with integrity protection using JWT
  * @param state - The state object to encode
- * @returns Base64 encoded state with HMAC signature
+ * @returns JWT token with HMAC signature and expiry
  */
 export async function encodeStateWithIntegrity(
 	config: ValidatedEnv,
 	state: AuthRequest,
 ): Promise<string> {
-	const stateJson = JSON.stringify(state)
-	const stateBase64 = btoa(stateJson)
-	const signature = await createHmacSignature(
-		stateBase64,
-		config.COOKIE_ENCRYPTION_KEY,
-	)
-
-	// Create state envelope
-	const envelope: StateEnvelope = {
-		data: stateBase64,
-		signature: signature,
-		version: 1,
-	}
-
-	return btoa(JSON.stringify(envelope))
+	return await jwt.sign(config.COOKIE_ENCRYPTION_KEY, state)
 }
 
 /**
  * Decodes and verifies a state parameter with integrity checking.
- * Handles the double-encoding issue and verifies HMAC signature.
+ * Uses JWT format with HMAC signature verification and expiry checking.
  *
  * NOTE: This extracts the application-specific portion of the state after
  * EnhancedTokenManager has processed its PKCE-related data. The full original
@@ -155,31 +70,18 @@ export async function decodeAndVerifyState(
 			? decodeURIComponent(stateParam)
 			: stateParam
 
-		// Try to decode as our signed state format first
+		// Try to decode as JWT format first
 		try {
-			const signedStateJson = safeBase64Decode(decodedParam)
-			const envelope = JSON.parse(signedStateJson) as Partial<StateEnvelope>
-
-			if (envelope.data && envelope.signature && envelope.version === 1) {
-				// Verify HMAC signature
-				const isValid = await verifyHmacSignature(
-					envelope.data,
-					envelope.signature,
-					config.COOKIE_ENCRYPTION_KEY,
-				)
-
-				if (!isValid) {
-					stateLogger.error('[ERROR] State HMAC signature verification failed')
-					return null
-				}
-
-				// Decode the verified state data
-				const stateJson = safeBase64Decode(envelope.data)
-				return JSON.parse(stateJson) as AuthRequest
-			}
-		} catch {
-			// Fall back to legacy format without HMAC for backward compatibility
-			stateLogger.info('State not in signed format, trying legacy decoding')
+			return await jwt.verify<AuthRequest>(
+				config.COOKIE_ENCRYPTION_KEY,
+				decodedParam,
+			)
+		} catch (jwtError) {
+			// If JWT verification fails, try legacy format
+			stateLogger.info(
+				'State not in JWT format, trying legacy decoding:',
+				jwtError instanceof Error ? jwtError.message : 'Unknown error',
+			)
 		}
 
 		// Legacy format: direct base64 encoded JSON
