@@ -1,5 +1,5 @@
 import { type ValidatedEnv } from '../../types/env'
-import { buildConfig } from '../config'
+import { getConfig } from '../config'
 import { makeKvTokenStore } from './kvTokenStore'
 import { logger } from './log'
 
@@ -94,7 +94,7 @@ export async function gatherDiagnostics(
 	}
 
 	try {
-		const env = context.validatedConfig ?? buildConfig(context.env)
+		const env = context.validatedConfig ?? getConfig(context.env)
 		// Update environment properties - shape already exists
 		diagnosticInfo.environment = {
 			hasClientId: !!env.SCHWAB_CLIENT_ID,

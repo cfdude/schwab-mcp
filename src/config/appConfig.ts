@@ -72,7 +72,7 @@ const envSchema = z.object({
 		),
 })
 
-export function buildConfig(env: Env): ValidatedEnv {
+function buildConfigInternal(env: Env): ValidatedEnv {
 	try {
 		const validated = envSchema.parse(env)
 
@@ -110,4 +110,28 @@ export function buildConfig(env: Env): ValidatedEnv {
 		}
 		throw error
 	}
+}
+
+// Memoized singleton config getter
+export const getConfig = (() => {
+	let cachedConfig: ValidatedEnv | null = null
+	let cachedEnvHash: string | null = null
+
+	return (env: Env): ValidatedEnv => {
+		// Create a simple hash of the env object for memoization
+		const envHash = JSON.stringify(Object.keys(env).sort().map(key => [key, (env as any)[key]]))
+		
+		if (cachedConfig && cachedEnvHash === envHash) {
+			return cachedConfig
+		}
+
+		cachedConfig = buildConfigInternal(env)
+		cachedEnvHash = envHash
+		return cachedConfig
+	}
+})()
+
+// Keep backward compatibility
+export function buildConfig(env: Env): ValidatedEnv {
+	return getConfig(env)
 }

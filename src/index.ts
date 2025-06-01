@@ -10,7 +10,7 @@ import {
 import { DurableMCP } from 'workers-mcp'
 import { type ValidatedEnv } from '../types/env'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
-import { buildConfig } from './config'
+import { getConfig } from './config'
 import {
 	APP_NAME,
 	API_ENDPOINTS,
@@ -65,7 +65,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 					],
 				}),
 			)
-			this.validatedConfig = buildConfig(this.env)
+			this.validatedConfig = getConfig(this.env)
 			// Initialize logger with configured level
 			const logLevel = this.validatedConfig.LOG_LEVEL as PinoLogLevel
 			const newLogger = buildLogger(logLevel)

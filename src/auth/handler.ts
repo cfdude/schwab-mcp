@@ -7,7 +7,7 @@ import {
 } from '@sudowealth/schwab-api'
 import { Hono } from 'hono'
 import { type Env } from '../../types/env'
-import { buildConfig } from '../config'
+import { getConfig } from '../config'
 import { LOGGER_CONTEXTS, APP_SERVER_NAME } from '../shared/constants'
 import { makeKvTokenStore } from '../shared/kvTokenStore'
 import { logger } from '../shared/log'
@@ -40,7 +40,7 @@ const oauthLogger = logger.child(LOGGER_CONTEXTS.OAUTH_HANDLER)
  */
 app.get('/authorize', async (c) => {
 	try {
-		const config = buildConfig(c.env)
+		const config = getConfig(c.env)
 		const oauthReqInfo = await c.env.OAUTH_PROVIDER.parseAuthRequest(c.req.raw)
 		const { clientId } = oauthReqInfo
 
@@ -91,7 +91,7 @@ app.get('/authorize', async (c) => {
  */
 app.post('/authorize', async (c) => {
 	try {
-		const config = buildConfig(c.env)
+		const config = getConfig(c.env)
 		const { state, headers } = await parseRedirectApproval(c.req.raw, config)
 
 		if (!state.oauthReqInfo) {
@@ -142,7 +142,7 @@ app.post('/authorize', async (c) => {
  */
 app.get('/callback', async (c) => {
 	try {
-		const config = buildConfig(c.env)
+		const config = getConfig(c.env)
 		// Extract state and code from query parameters
 		const stateParam = c.req.query('state')
 		const code = c.req.query('code')
