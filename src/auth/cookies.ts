@@ -332,7 +332,7 @@ export async function parseRedirectApproval(
 		}
 
 		encodedState = stateParam
-		const decodedState = await decodeAndVerifyState(config, encodedState)
+		const decodedState = await decodeAndVerifyState<StateData>(config, encodedState)
 		if (!decodedState) {
 			throw new AuthErrors.InvalidState()
 		}

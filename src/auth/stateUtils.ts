@@ -28,11 +28,10 @@ const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
 /**
  * Interface for structured state data
  */
-export interface StateData {
+export interface StateData extends Record<string, unknown> {
 	clientId?: string
 	userId?: string
 	oauthReqInfo?: AuthRequest
-	[key: string]: any
 }
 
 /**
@@ -40,11 +39,11 @@ export interface StateData {
  * @param state - The state object to encode
  * @returns JWT token with HMAC signature and expiry
  */
-export async function encodeStateWithIntegrity(
+export async function encodeStateWithIntegrity<T = AuthRequest>(
 	config: ValidatedEnv,
-	state: AuthRequest,
+	state: T,
 ): Promise<string> {
-	return await jwt.sign(config.COOKIE_ENCRYPTION_KEY, state)
+	return await jwt.sign(config.COOKIE_ENCRYPTION_KEY, state as Record<string, unknown>)
 }
 
 /**
@@ -58,10 +57,10 @@ export async function encodeStateWithIntegrity(
  * @param stateParam - The state parameter to decode and verify.
  * @returns The parsed state data with typed access to common fields, or null if decoding/verification fails.
  */
-export async function decodeAndVerifyState(
+export async function decodeAndVerifyState<T = AuthRequest>(
 	config: ValidatedEnv,
 	stateParam: string,
-): Promise<AuthRequest | null> {
+): Promise<T | null> {
 	try {
 		// The state parameter may be URL-encoded when received from query params
 		const decodedParam = stateParam.includes('%')
@@ -70,10 +69,10 @@ export async function decodeAndVerifyState(
 
 		// Try to decode as JWT format first
 		try {
-			return await jwt.verify<AuthRequest>(
+			return await jwt.verify<Record<string, unknown>>(
 				config.COOKIE_ENCRYPTION_KEY,
 				decodedParam,
-			)
+			) as T
 		} catch (jwtError) {
 			// If JWT verification fails, try legacy format
 			stateLogger.info(
@@ -85,7 +84,7 @@ export async function decodeAndVerifyState(
 		// Legacy format: direct base64 encoded JSON
 		try {
 			const decodedState = safeBase64Decode(decodedParam)
-			return JSON.parse(decodedState) as AuthRequest
+			return JSON.parse(decodedState) as T
 		} catch (error) {
 			stateLogger.error(
 				'[ERROR] Error in base64 decoding or JSON parsing:',
@@ -109,8 +108,15 @@ export async function decodeAndVerifyState(
  * @returns The client ID from the state.
  * @throws Error if client ID cannot be extracted.
  */
-export function extractClientIdFromState(state: StateData): string {
-	const clientId = state.clientId || state.oauthReqInfo?.clientId
+export function extractClientIdFromState(state: StateData | AuthRequest): string {
+	// Handle AuthRequest objects directly
+	if ('clientId' in state && typeof state.clientId === 'string') {
+		return state.clientId
+	}
+	
+	// Handle StateData objects
+	const stateData = state as StateData
+	const clientId = stateData.clientId || stateData.oauthReqInfo?.clientId
 
 	if (!clientId) {
 		throw new AuthErrors.ClientIdExtraction()

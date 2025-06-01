@@ -11,7 +11,7 @@ interface JWTHeader {
 interface JWTPayload {
 	iat: number
 	exp: number
-	[key: string]: any
+	[key: string]: unknown
 }
 
 function base64UrlEncode(data: string | Uint8Array): string {
@@ -82,7 +82,7 @@ async function verifyHmacSignature(
 	}
 }
 
-export async function sign<T extends Record<string, any>>(
+export async function sign<T extends Record<string, unknown>>(
 	secret: string,
 	payload: T,
 ): Promise<string> {
@@ -104,7 +104,7 @@ export async function sign<T extends Record<string, any>>(
 	return `${message}.${signature}`
 }
 
-export async function verify<T extends Record<string, any>>(
+export async function verify<T extends Record<string, unknown>>(
 	secret: string,
 	token: string,
 ): Promise<T> {
