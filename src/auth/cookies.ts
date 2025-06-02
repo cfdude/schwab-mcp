@@ -9,11 +9,7 @@ import { logger } from '../shared/log'
 import { sanitizeError } from '../shared/secureLogger'
 import { AuthErrors } from './errors'
 import { ApprovedClientsSchema } from './schemas'
-import {
-	decodeAndVerifyState,
-	extractClientIdFromState,
-	type StateData,
-} from './stateUtils'
+import { extractClientIdFromState, type StateData } from './stateUtils'
 
 // Create scoped logger for cookie operations
 const cookieLogger = logger.child(LOGGER_CONTEXTS.COOKIES)
@@ -74,7 +70,9 @@ async function importKey(secret: string): Promise<CryptoKey> {
 	}
 
 	// Warn if key appears to be weak (e.g., simple patterns)
-	const isSimplePattern = /^(.)\1*$|^(01|10|abc|123|password|secret)+$/i.test(secret)
+	const isSimplePattern = /^(.)\1*$|^(01|10|abc|123|password|secret)+$/i.test(
+		secret,
+	)
 	if (isSimplePattern) {
 		throw new Error(
 			'Cookie encryption key appears to use a weak pattern. Use a cryptographically secure random string.',
@@ -351,14 +349,23 @@ export async function parseRedirectApproval(
 		}
 
 		encodedState = stateParam
-		const decodedState = await decodeAndVerifyState<StateData>(
-			config,
-			encodedState,
-		)
-		if (!decodedState) {
+
+		// The state from the approval form is simple base64-encoded JSON (not EnhancedTokenManager format)
+		// This is different from callback states which go through EnhancedTokenManager
+		try {
+			const decodedStateString = atob(encodedState)
+			const parsedState = JSON.parse(decodedStateString)
+			state = parsedState as StateData
+		} catch (decodeError) {
+			cookieLogger.error('Failed to decode approval form state:', {
+				error:
+					decodeError instanceof Error
+						? decodeError.message
+						: String(decodeError),
+			})
 			throw new AuthErrors.InvalidState()
 		}
-		state = decodedState
+
 		clientId = extractClientIdFromState(state)
 	} catch (e) {
 		cookieLogger.error('Error processing form submission:', sanitizeError(e))

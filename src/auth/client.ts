@@ -15,7 +15,6 @@ import { type ValidatedEnv, type Env } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/log'
 import { AuthErrors, formatAuthError } from './errors'
-import { encodeStateWithIntegrity } from './stateUtils'
 import { mapTokenPersistence } from './tokenPersistence'
 
 // Create scoped logger for auth client
@@ -105,7 +104,9 @@ export async function redirectToSchwab(
 		// 1. Generate PKCE code_verifier and code_challenge
 		// 2. Embed our application state along with its code_verifier in the state parameter
 		// 3. Include code_challenge in the authorization URL as required by PKCE
-		const encodedState = await encodeStateWithIntegrity(config, oauthReqInfo)
+
+		// Use simple JSON encoding for state parameter
+		const encodedState = btoa(JSON.stringify(oauthReqInfo))
 		const { authUrl } = await auth.getAuthorizationUrl({
 			state: encodedState,
 		})

@@ -205,20 +205,13 @@ interface ApprovalDialogTemplateParams {
 		description?: string
 	}
 	encodedState: string
-	warnAboutUntrustedClient: boolean
 	formActionPath: string
 }
 
 export function createApprovalDialogHTML(
 	params: ApprovalDialogTemplateParams,
 ): string {
-	const {
-		client,
-		server,
-		encodedState,
-		warnAboutUntrustedClient,
-		formActionPath,
-	} = params
+	const { client, server, encodedState, formActionPath } = params
 
 	return /*html*/ `
     <!DOCTYPE html>
@@ -243,17 +236,6 @@ export function createApprovalDialogHTML(
         <div class="card">
           
           <h2 class="alert"><strong>${sanitizeHtml(client.name) || 'A new MCP Client'}</strong> is requesting access</h2>
-          
-          ${
-						warnAboutUntrustedClient
-							? /*html*/ `
-            <div class="warning">
-              <span class="warning-icon">⚠️</span>
-              <strong>Security Warning:</strong> Some redirect URIs provided by this client are not in the allowed list and have been filtered out for your security.
-            </div>
-          `
-							: ''
-					}
           
           <div class="client-info">
             <div class="client-detail">

@@ -29,7 +29,6 @@ export const LOGGER_CONTEXTS = {
 	AUTH_CLIENT: 'auth-client',
 	STATE_UTILS: 'state-utils',
 	KV_TOKEN_STORE: 'kv-token-store',
-	JWT: 'jwt',
 } as const
 
 /**
@@ -55,10 +54,6 @@ export const TOOL_NAMES = {
  */
 export const ENVIRONMENTS = {
 	PRODUCTION: 'PRODUCTION',
-} as const
-
-export const LOG_LEVELS = {
-	DEBUG: 'debug',
 } as const
 
 /**

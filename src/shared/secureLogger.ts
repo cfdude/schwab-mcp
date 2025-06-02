@@ -50,7 +50,20 @@ function shouldRedactKey(key: string): boolean {
 		'token',
 		'secret',
 		'password',
-		'jwt',
+		'code_verifier',
+		'code_challenge',
+		'refresh_token',
+		'access_token',
+		'id_token',
+		'auth_token',
+		'bearer',
+		'api_key',
+		'private_key',
+		'certificate',
+		'signature',
+		'hash',
+		'credentials',
+		'auth',
 	]
 
 	const lowerKey = key.toLowerCase()

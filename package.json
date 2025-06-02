@@ -31,7 +31,6 @@
     "@cloudflare/workers-oauth-provider": "^0.0.5",
     "@modelcontextprotocol/sdk": "^1.11.5",
     "@sudowealth/schwab-api": "^2.1.0-beta.6",
-    "@tsndr/cloudflare-worker-jwt": "^3.1.5",
     "hono": "^4.7.10",
     "pino": "^9.7.0",
     "workers-mcp": "^0.1.0-3",

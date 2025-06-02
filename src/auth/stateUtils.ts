@@ -6,7 +6,6 @@ import { logger } from '../shared/log'
 import { sanitizeError } from '../shared/secureLogger'
 import { AuthErrors } from './errors'
 import { StateSchema, type StateData as StateDataFromSchema } from './schemas'
-import { signState, verifyState } from './utils/jwt'
 
 // Create scoped logger for OAuth state operations
 const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
@@ -33,31 +32,14 @@ const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
 export type StateData = StateDataFromSchema
 
 /**
- * Encodes state with integrity protection using JWT
- * @param state - The state object to encode
- * @returns JWT token with HMAC signature and expiry
- */
-export async function encodeStateWithIntegrity<T = AuthRequest>(
-	config: ValidatedEnv,
-	state: T,
-): Promise<string> {
-	return await signState(
-		config.COOKIE_ENCRYPTION_KEY,
-		state as Record<string, unknown>,
-		config.JWT_STATE_EXPIRATION_SECONDS ?? 180, // Default to 3 minutes
-	)
-}
-
-/**
- * Decodes and verifies a state parameter with integrity checking.
- * Uses JWT format with HMAC signature verification and expiry checking.
+ * Decodes and verifies a state parameter.
  *
  * NOTE: This extracts the application-specific portion of the state after
  * EnhancedTokenManager has processed its PKCE-related data. The full original
  * stateParam should still be passed to ETM.exchangeCode() before using this function.
  *
  * @param stateParam - The state parameter to decode and verify.
- * @returns The parsed state data with typed access to common fields, or null if decoding/verification fails.
+ * @returns The parsed state data with typed access to common fields, or null if decoding fails.
  */
 export async function decodeAndVerifyState<T = AuthRequest>(
 	config: ValidatedEnv,
@@ -74,34 +56,17 @@ export async function decodeAndVerifyState<T = AuthRequest>(
 			const decodedState = safeBase64Decode(decodedParam)
 			const parsed = JSON.parse(decodedState)
 
-			// EnhancedTokenManager always wraps our state in this format
-			if (
-				parsed.original_app_state &&
-				typeof parsed.original_app_state === 'string'
-			) {
-				stateLogger.debug('Processing EnhancedTokenManager wrapped state')
-
-				// The original_app_state contains our JWT token
-				try {
-					const appStatePayload = await verifyState<Record<string, unknown>>(
-						config.COOKIE_ENCRYPTION_KEY,
-						parsed.original_app_state,
-					)
-					return StateSchema.parse(appStatePayload) as T
-				} catch (appStateError) {
-					stateLogger.error('Failed to decode original_app_state JWT:', {
-						error:
-							appStateError instanceof Error
-								? appStateError.message
-								: String(appStateError),
-					})
-					return null
-				}
+			// Check if this is a direct state with PKCE fields added by EnhancedTokenManager
+			if (parsed.responseType && parsed.clientId) {
+				stateLogger.debug(
+					'Processing state with PKCE fields from EnhancedTokenManager',
+				)
+				return StateSchema.parse(parsed) as T
 			}
 
 			// If we reach here, the state format is unexpected
 			stateLogger.error(
-				'Unexpected state format - missing original_app_state field',
+				'Unexpected state format - missing required OAuth fields',
 			)
 			return null
 		} catch (error) {

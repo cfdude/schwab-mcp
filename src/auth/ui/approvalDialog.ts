@@ -1,7 +1,5 @@
 import { type ClientInfo } from '@cloudflare/workers-oauth-provider'
 import { type ValidatedEnv } from '../../../types/env'
-import { logger } from '../../shared/log'
-import { createRedirectValidator } from '../redirectValidator'
 import { createApprovalDialogHTML } from './templates'
 
 /**
@@ -58,32 +56,10 @@ export function renderApprovalDialog(
 	request: Request,
 	options: ApprovalDialogOptions,
 ): Response {
-	const { client, server, state, config } = options
+	const { client, server, state } = options
 
 	// Encode state for form submission
 	const encodedState = btoa(JSON.stringify(state))
-
-	// Get and validate redirect URIs
-	let redirectUris: string[] = []
-	let warnAboutUntrustedClient = false
-	if (client?.redirectUris && client.redirectUris.length > 0) {
-		// Create validator with environment-configurable patterns
-		const redirectValidator = createRedirectValidator(config)
-
-		// Validate each redirect URI against the allowlist
-		const validUris = redirectValidator.filterValidRedirectUris(
-			client.redirectUris,
-		)
-
-		if (validUris.length !== client.redirectUris.length) {
-			warnAboutUntrustedClient = true
-			logger.warn(
-				`Client ${client?.clientName || 'Unknown'} has invalid redirect URIs. Valid: ${validUris.length}/${client.redirectUris.length}`,
-			)
-		}
-
-		redirectUris = validUris
-	}
 
 	// Use the template to generate HTML
 	const htmlContent = createApprovalDialogHTML({
@@ -94,7 +70,7 @@ export function renderApprovalDialog(
 			logoUri: client?.logoUri,
 			policyUri: client?.policyUri,
 			tosUri: client?.tosUri,
-			redirectUris,
+			redirectUris: client?.redirectUris || [],
 			contacts: client?.contacts,
 		},
 		server: {
@@ -103,7 +79,6 @@ export function renderApprovalDialog(
 			description: server.description,
 		},
 		encodedState,
-		warnAboutUntrustedClient,
 		formActionPath: new URL(request.url).pathname,
 	})
 
