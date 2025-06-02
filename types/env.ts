@@ -38,6 +38,18 @@ export interface Env {
 	LOG_LEVEL?: string
 
 	/**
+	 * Environment type (development, staging, production)
+	 * Defaults to production if not specified
+	 */
+	ENVIRONMENT?: string
+
+	/**
+	 * JWT state token expiration in seconds (60-600)
+	 * Defaults to 180 seconds (3 minutes)
+	 */
+	JWT_STATE_EXPIRATION_SECONDS?: string
+
+	/**
 	 * Optional comma-separated list of additional redirect URI regex patterns
 	 */
 	ALLOWED_REDIRECT_REGEXPS?: string
@@ -80,8 +92,19 @@ export interface ValidatedEnv {
 	readonly LOG_LEVEL?: string
 
 	/**
+	 * Environment type (development, staging, production)
+	 * Defaults to production if not specified
+	 */
+	readonly ENVIRONMENT?: 'development' | 'staging' | 'production'
+
+	/**
+	 * JWT state token expiration in seconds (60-600)
+	 * Defaults to 180 seconds (3 minutes)
+	 */
+	readonly JWT_STATE_EXPIRATION_SECONDS?: number
+
+	/**
 	 * Optional comma-separated list of additional redirect URI regex patterns
 	 */
 	readonly ALLOWED_REDIRECT_REGEXPS?: string
 }
-

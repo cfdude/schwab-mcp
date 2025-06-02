@@ -40,8 +40,7 @@ class RedirectValidator {
 			}
 
 			// Don't allow localhost in production
-			const isProduction =
-				this.config.LOG_LEVEL !== 'debug' && this.config.LOG_LEVEL !== 'trace'
+			const isProduction = this.config.ENVIRONMENT === 'production'
 			if (
 				isProduction &&
 				(url.hostname === 'localhost' || url.hostname === '127.0.0.1')

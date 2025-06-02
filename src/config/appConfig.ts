@@ -39,6 +39,21 @@ const envSchema = z.object({
 		.optional()
 		.default('info'),
 
+	ENVIRONMENT: z
+		.enum(['development', 'staging', 'production'])
+		.optional()
+		.default('production'),
+
+	JWT_STATE_EXPIRATION_SECONDS: z
+		.string()
+		.optional()
+		.default('180') // 3 minutes default
+		.transform((val) => parseInt(val, 10))
+		.refine((val) => val >= 60 && val <= 600, {
+			message:
+				'JWT_STATE_EXPIRATION_SECONDS must be between 60 and 600 seconds',
+		}),
+
 	ALLOWED_REDIRECT_REGEXPS: z
 		.string()
 		.optional()
@@ -119,8 +134,12 @@ export const getConfig = (() => {
 
 	return (env: Env): ValidatedEnv => {
 		// Create a simple hash of the env object for memoization
-		const envHash = JSON.stringify(Object.keys(env).sort().map(key => [key, (env as any)[key]]))
-		
+		const envHash = JSON.stringify(
+			Object.keys(env)
+				.sort()
+				.map((key) => [key, (env as any)[key]]),
+		)
+
 		if (cachedConfig && cachedEnvHash === envHash) {
 			return cachedConfig
 		}

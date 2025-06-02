@@ -106,11 +106,6 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			const saveTokenForETM = async (tokenSet: TokenData) => {
 				await kvToken.save(getTokenIds(), tokenSet)
 				this.mcpLogger.debug('ETM: Token save to KV complete', {
-					hasAccessToken: !!tokenSet.accessToken,
-					hasRefreshToken: !!tokenSet.refreshToken,
-					expiresAt: tokenSet.expiresAt
-						? new Date(tokenSet.expiresAt).toISOString()
-						: 'unknown',
 					keyPrefix: sanitizeKeyForLog(kvToken.kvKey(getTokenIds())),
 				})
 			}
@@ -126,15 +121,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 				const tokenData = await kvToken.load(tokenIds)
 				this.mcpLogger.debug('ETM: Token load from KV complete', {
-					hasAccessToken: !!tokenData?.accessToken,
-					hasRefreshToken: !!tokenData?.refreshToken,
-					expiresAt: tokenData?.expiresAt
-						? new Date(tokenData.expiresAt).toISOString()
-						: 'unknown',
 					keyPrefix: sanitizeKeyForLog(kvToken.kvKey(tokenIds)),
-					tokenFound: !!tokenData,
-					hasSchwabUserId: !!tokenIds.schwabUserId,
-					hasClientId: !!tokenIds.clientId,
 				})
 				return tokenData
 			}
@@ -196,7 +183,10 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 					environment: ENVIRONMENTS.PRODUCTION,
 					logger: mcpLogger,
 					enableLogging: true,
-					logLevel: LOG_LEVELS.DEBUG,
+					logLevel:
+						this.validatedConfig.ENVIRONMENT === 'production'
+							? 'error'
+							: 'debug',
 				},
 				auth: this.tokenManager,
 			})

@@ -58,8 +58,8 @@ export function initializeSchwabAuthClient(
 		// MCP-specific desired defaults for EnhancedTokenManager
 		validateTokens: true, // Validate tokens on load/use
 		autoReconnect: true, // Enable auto reconnection
-		debug: true, // Enable debug logging
-		traceOperations: true, // Enable operation tracing
+		debug: config.LOG_LEVEL === 'debug' || config.LOG_LEVEL === 'trace', // Only enable in debug mode
+		traceOperations: config.LOG_LEVEL === 'trace', // Only enable in trace mode
 		refreshThresholdMs: 5 * 60 * 1000, // 5 minutes before expiration
 	}
 

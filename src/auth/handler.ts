@@ -193,7 +193,6 @@ app.get('/callback', async (c) => {
 			const errorInfo = formatAuthError(error, {
 				detail:
 					'Decoded state object from Schwab callback is missing required AuthRequest fields (clientId, redirectUri, or scope).',
-				decodedState: decodedStateAsAuthRequest, // Log the problematic state
 			})
 			oauthLogger.error(errorInfo.message, errorInfo.details)
 			const jsonResponse = createJsonErrorResponse(

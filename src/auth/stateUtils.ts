@@ -43,6 +43,7 @@ export async function encodeStateWithIntegrity<T = AuthRequest>(
 	return await signState(
 		config.COOKIE_ENCRYPTION_KEY,
 		state as Record<string, unknown>,
+		config.JWT_STATE_EXPIRATION_SECONDS ?? 180, // Default to 3 minutes
 	)
 }
 
