@@ -168,6 +168,8 @@ dist
 
 # wrangler project
 
+wrangler.jsonc         # Personal/local config (git-ignored)
+wrangler.local.jsonc   # Alternative personal config
+wrangler.deploy.jsonc  # CI-generated config
 .dev.vars
 .wrangler/
-wrangler.local.jsonc

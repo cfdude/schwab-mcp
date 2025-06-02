@@ -98,9 +98,9 @@ npx wrangler login
 # Create KV namespace
 npx wrangler kv:namespace create "OAUTH_KV"
 
-# Set up local configuration
-cp wrangler.example.local.jsonc wrangler.local.jsonc
-# Edit wrangler.local.jsonc with your KV namespace ID
+# Set up personal configuration
+cp wrangler.example.jsonc wrangler.jsonc
+# Edit wrangler.jsonc with your KV namespace ID and personal name
 
 # Set your secrets
 npx wrangler secret put SCHWAB_CLIENT_ID
@@ -108,9 +108,38 @@ npx wrangler secret put SCHWAB_CLIENT_SECRET
 npx wrangler secret put SCHWAB_REDIRECT_URI
 npx wrangler secret put COOKIE_ENCRYPTION_KEY
 
-# Deploy locally
-npm run deploy:local
+# Deploy
+npm run deploy
 ```
+
+### Personal vs Open Source Usage
+
+This repository is designed to work cleanly for both personal use and open source contribution:
+
+**📁 Files Structure:**
+- `wrangler.base.jsonc` - Clean base config (committed to repo)
+- `wrangler.example.jsonc` - Template for personal setup (committed to repo)
+- `wrangler.jsonc` - Your personal config (git-ignored)
+
+**🏠 For Personal Use:**
+```bash
+# Copy the template and customize
+cp wrangler.example.jsonc wrangler.jsonc
+
+# Edit wrangler.jsonc to add:
+# 1. Your KV namespace ID
+# 2. A unique name (e.g., "schwab-mcp-yourname")
+
+# Deploy normally
+npm run deploy
+```
+
+**🔄 For Contributing:**
+Since `wrangler.jsonc` is git-ignored, you can:
+- Develop features using your personal config
+- Test with your own Schwab account
+- Commit code changes without exposing secrets
+- Your personal deployment won't conflict with others
 
 ### Detailed Setup
 

@@ -48,9 +48,28 @@ jobs:
       - name: Validate
         run: npm run validate
 
+      - name: Create deployment config
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cat > wrangler.deploy.jsonc << 'EOF'
+          {
+            "extends": "./wrangler.base.jsonc",
+            "name": "schwab-mcp",
+            "kv_namespaces": [
+              {
+                "binding": "OAUTH_KV",
+                "id": "${{ secrets.OAUTH_KV_ID }}"
+              }
+            ],
+            "observability": {
+              "enabled": true
+            }
+          }
+          EOF
+
       - name: Deploy to Cloudflare Workers
         if: github.ref == 'refs/heads/main'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: deploy --binding OAUTH_KV=${{ secrets.OAUTH_KV_ID }}
+          command: deploy --config wrangler.deploy.jsonc

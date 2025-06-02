@@ -1,0 +1,21 @@
+/**
+ * Example personal/local development configuration
+ *
+ * Instructions:
+ * 1. Copy this file to wrangler.jsonc (for your personal deployment)
+ * 2. Replace YOUR_KV_NAMESPACE_ID_HERE with your actual KV namespace ID
+ * 3. Optionally change the name to avoid conflicts with others
+ *
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"extends": "./wrangler.base.jsonc",
+	"name": "schwab-mcp-personal", // Change this to a unique name for your deployment
+	"kv_namespaces": [
+		{
+			"binding": "OAUTH_KV",
+			"id": "YOUR_KV_NAMESPACE_ID_HERE", // Replace with your actual KV namespace ID
+		},
+	],
+}
