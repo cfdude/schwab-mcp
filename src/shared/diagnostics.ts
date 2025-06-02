@@ -2,6 +2,7 @@ import { type ValidatedEnv } from '../../types/env'
 import { getConfig } from '../config'
 import { makeKvTokenStore } from './kvTokenStore'
 import { logger } from './log'
+import { sanitizeKeyForLog } from './secureLogger'
 
 interface DiagnosticInfo {
 	timestamp: string
@@ -17,7 +18,7 @@ interface DiagnosticInfo {
 	}
 	kvTokenStatus?: {
 		hasTokenInKV: boolean
-		tokenKey: string
+		tokenKeyPrefix: string
 		hasAccessToken: boolean
 		hasRefreshToken: boolean
 		expiresAt?: string
@@ -74,7 +75,7 @@ export async function gatherDiagnostics(
 		},
 		kvTokenStatus: {
 			hasTokenInKV: false,
-			tokenKey: '',
+			tokenKeyPrefix: '',
 			hasAccessToken: false,
 			hasRefreshToken: false,
 			expiresAt: undefined,
@@ -117,7 +118,7 @@ export async function gatherDiagnostics(
 				// Update kvTokenStatus properties - shape already exists
 				diagnosticInfo.kvTokenStatus = {
 					hasTokenInKV: !!kvTokenData,
-					tokenKey: kvToken.kvKey(tokenIds),
+					tokenKeyPrefix: sanitizeKeyForLog(kvToken.kvKey(tokenIds)),
 					hasAccessToken: !!kvTokenData?.accessToken,
 					hasRefreshToken: !!kvTokenData?.refreshToken,
 					expiresAt: kvTokenData?.expiresAt

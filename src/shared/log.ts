@@ -47,6 +47,16 @@ const REDACT_PATHS = [
 	'apiKey',
 	'client_secret',
 	'clientSecret',
+	'schwabUserId',
+	'clientId',
+	'accountNumber',
+	'hashValue',
+	'schwabClientCorrelId',
+	'sourceKey',
+	'expectedKey',
+	'tokenKey',
+	'fromKey',
+	'toKey',
 	'*.password',
 	'*.secret',
 	'*.token',
@@ -61,6 +71,16 @@ const REDACT_PATHS = [
 	'*.apiKey',
 	'*.client_secret',
 	'*.clientSecret',
+	'*.schwabUserId',
+	'*.clientId',
+	'*.accountNumber',
+	'*.hashValue',
+	'*.schwabClientCorrelId',
+	'*.sourceKey',
+	'*.expectedKey',
+	'*.tokenKey',
+	'*.fromKey',
+	'*.toKey',
 ]
 
 // Custom serializers for additional redaction
@@ -138,7 +158,7 @@ export function buildLogger(level: PinoLogLevel = 'info'): AppLogger {
 		error: createLogFunction(baseLogger.error.bind(baseLogger)),
 		child: (contextId: string): ChildLogger => {
 			const childLogger = baseLogger.child({ contextId })
-			
+
 			const createChildLogFunction = (
 				logFn: pino.LogFn,
 			): ((message: string, data?: any, contextId?: string) => void) => {
@@ -152,7 +172,7 @@ export function buildLogger(level: PinoLogLevel = 'info'): AppLogger {
 					}
 				}
 			}
-			
+
 			return {
 				debug: createChildLogFunction(childLogger.debug.bind(childLogger)),
 				info: createChildLogFunction(childLogger.info.bind(childLogger)),

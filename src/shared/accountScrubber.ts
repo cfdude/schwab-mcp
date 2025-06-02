@@ -40,7 +40,9 @@ export async function buildAccountDisplayMap(
 		map[acc.accountNumber] = display
 		map[acc.hashValue] = display
 	}
-	logger.debug('[AccountScrubber] Built account display map', map)
+	logger.debug('[AccountScrubber] Built account display map', {
+		accountCount: Object.keys(map).length,
+	})
 	return map
 }
 

@@ -1,6 +1,7 @@
 import { type TokenData } from '@sudowealth/schwab-api'
 import pino from 'pino'
 import { TOKEN_KEY_PREFIX, TTL_31_DAYS } from './constants'
+import { sanitizeKeyForLog } from './secureLogger'
 
 /**
  * Token identifiers for KV key generation
@@ -96,9 +97,9 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 
 			kvLogger.debug(
 				{
-					keysChecked: keysToCheck,
+					keysCheckedCount: keysToCheck.length,
 					found: !!tokenData,
-					sourceKey: sourceKey || 'none',
+					sourceKeyPrefix: sourceKey ? sanitizeKeyForLog(sourceKey) : 'none',
 				},
 				'Token lookup result',
 			)
@@ -113,8 +114,8 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			) {
 				kvLogger.info(
 					{
-						fromKey: clientKey,
-						toKey: schwabUserKey,
+						fromKeyPrefix: sanitizeKeyForLog(clientKey),
+						toKeyPrefix: sanitizeKeyForLog(schwabUserKey),
 					},
 					'Migrating token from clientId to schwabUserId key',
 				)
@@ -127,8 +128,8 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 
 				kvLogger.debug(
 					{
-						fromKey: clientKey,
-						toKey: schwabUserKey,
+						fromKeyPrefix: sanitizeKeyForLog(clientKey),
+						toKeyPrefix: sanitizeKeyForLog(schwabUserKey),
 					},
 					'Token migration completed',
 				)
@@ -151,7 +152,10 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			const serialized = JSON.stringify(data)
 
 			await kv.put(key, serialized, { expirationTtl: TTL_31_DAYS })
-			kvLogger.debug({ key, expiresAt: data.expiresAt }, 'Token saved to KV')
+			kvLogger.debug(
+				{ keyPrefix: sanitizeKeyForLog(key), expiresAt: data.expiresAt },
+				'Token saved to KV',
+			)
 		} catch (error) {
 			kvLogger.error({ error, ids }, 'Failed to save token to KV')
 			throw error
@@ -174,7 +178,7 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			if (fromKey === toKey) {
 				kvLogger.debug(
 					{
-						key: fromKey,
+						keyPrefix: sanitizeKeyForLog(fromKey),
 					},
 					'Migration not needed - keys are identical',
 				)
@@ -185,7 +189,7 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			const existingAtDestination = await kv.get(toKey)
 			if (existingAtDestination) {
 				kvLogger.debug(
-					{ toKey },
+					{ toKeyPrefix: sanitizeKeyForLog(toKey) },
 					'Migration skipped - token already exists at destination',
 				)
 				// If token exists at destination, clean up source silently
@@ -194,7 +198,7 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 				} catch (deleteError) {
 					kvLogger.debug(
 						{
-							fromKey,
+							fromKeyPrefix: sanitizeKeyForLog(fromKey),
 							error: deleteError,
 						},
 						'Source cleanup after existing destination failed',
@@ -206,14 +210,17 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			// Read the token directly from the source key
 			const raw = await kv.get(fromKey)
 			if (!raw) {
-				kvLogger.debug({ fromKey }, 'Migration source token not found')
+				kvLogger.debug(
+					{ fromKeyPrefix: sanitizeKeyForLog(fromKey) },
+					'Migration source token not found',
+				)
 				return false
 			}
 
 			const tokenData = JSON.parse(raw) as T
 			kvLogger.debug(
 				{
-					fromKey,
+					fromKeyPrefix: sanitizeKeyForLog(fromKey),
 					hasToken: !!tokenData.accessToken,
 				},
 				'Migration source token found',
@@ -228,14 +235,20 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			} catch (deleteError) {
 				kvLogger.debug(
 					{
-						fromKey,
+						fromKeyPrefix: sanitizeKeyForLog(fromKey),
 						error: deleteError,
 					},
 					'Source key deletion may have raced with another instance',
 				)
 			}
 
-			kvLogger.info({ fromKey, toKey }, 'Token migrated successfully')
+			kvLogger.info(
+				{
+					fromKeyPrefix: sanitizeKeyForLog(fromKey),
+					toKeyPrefix: sanitizeKeyForLog(toKey),
+				},
+				'Token migrated successfully',
+			)
 			return true
 		} catch (error) {
 			kvLogger.error({ error, fromIds, toIds }, 'Token migration failed')
@@ -256,8 +269,8 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			kvLogger.debug(
 				{
 					success: migrateSuccess,
-					fromKey: kvKey(fromIds),
-					toKey: kvKey(toIds),
+					fromKeyPrefix: sanitizeKeyForLog(kvKey(fromIds)),
+					toKeyPrefix: sanitizeKeyForLog(kvKey(toIds)),
 				},
 				'Migration attempt completed',
 			)

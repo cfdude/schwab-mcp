@@ -24,6 +24,7 @@ import {
 import { gatherDiagnostics } from './shared/diagnostics'
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
 import { logger, buildLogger, type PinoLogLevel } from './shared/log'
+import { sanitizeKeyForLog, logOnlyInDevelopment } from './shared/secureLogger'
 import { createTool, toolError, toolSuccess } from './shared/toolBuilder'
 import { allToolSpecs, type ToolSpec } from './tools'
 
@@ -91,11 +92,10 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			})
 
 			// Debug token IDs during initialization
-			this.mcpLogger.debug('[MyMCP.init] Token identifiers', {
-				schwabUserId: this.props.schwabUserId,
-				clientId: this.props.clientId,
+			logOnlyInDevelopment(this.mcpLogger, 'debug', '[MyMCP.init] Token identifiers', {
 				hasSchwabUserId: !!this.props.schwabUserId,
-				expectedKey: kvToken.kvKey(getTokenIds()),
+				hasClientId: !!this.props.clientId,
+				expectedKeyPrefix: sanitizeKeyForLog(kvToken.kvKey(getTokenIds())),
 			})
 
 			// Token save function uses KV store exclusively
@@ -107,7 +107,7 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 					expiresAt: tokenSet.expiresAt
 						? new Date(tokenSet.expiresAt).toISOString()
 						: 'unknown',
-					key: kvToken.kvKey(getTokenIds()),
+					keyPrefix: sanitizeKeyForLog(kvToken.kvKey(getTokenIds())),
 				})
 			}
 
@@ -115,8 +115,9 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			const loadTokenForETM = async (): Promise<TokenData | null> => {
 				const tokenIds = getTokenIds()
 				this.mcpLogger.debug('[ETM Load] Attempting to load token', {
-					tokenIds,
-					expectedKey: kvToken.kvKey(tokenIds),
+					hasSchwabUserId: !!tokenIds.schwabUserId,
+					hasClientId: !!tokenIds.clientId,
+					expectedKeyPrefix: sanitizeKeyForLog(kvToken.kvKey(tokenIds)),
 				})
 
 				const tokenData = await kvToken.load(tokenIds)
@@ -126,10 +127,10 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 					expiresAt: tokenData?.expiresAt
 						? new Date(tokenData.expiresAt).toISOString()
 						: 'unknown',
-					key: kvToken.kvKey(tokenIds),
+					keyPrefix: sanitizeKeyForLog(kvToken.kvKey(tokenIds)),
 					tokenFound: !!tokenData,
-					schwabUserId: tokenIds.schwabUserId,
-					clientId: tokenIds.clientId,
+					hasSchwabUserId: !!tokenIds.schwabUserId,
+					hasClientId: !!tokenIds.clientId,
 				})
 				return tokenData
 			}

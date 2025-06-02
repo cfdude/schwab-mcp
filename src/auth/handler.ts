@@ -11,6 +11,7 @@ import { getConfig } from '../config'
 import { LOGGER_CONTEXTS, APP_SERVER_NAME } from '../shared/constants'
 import { makeKvTokenStore } from '../shared/kvTokenStore'
 import { logger } from '../shared/log'
+import { sanitizeKeyForLog } from '../shared/secureLogger'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
 import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
 import { mapSchwabError } from './errorMapping'
@@ -316,8 +317,8 @@ app.get('/callback', async (c) => {
 				// Save under schwabUserId key
 				await kvToken.save({ schwabUserId: userIdFromSchwab }, currentTokenData)
 				oauthLogger.info('Token migrated to schwabUserId key', {
-					fromKey: kvToken.kvKey({ clientId: clientIdFromState }),
-					toKey: kvToken.kvKey({ schwabUserId: userIdFromSchwab }),
+					fromKeyPrefix: sanitizeKeyForLog(kvToken.kvKey({ clientId: clientIdFromState })),
+					toKeyPrefix: sanitizeKeyForLog(kvToken.kvKey({ schwabUserId: userIdFromSchwab })),
 				})
 			}
 		} catch (migrationError) {

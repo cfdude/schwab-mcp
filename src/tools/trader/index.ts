@@ -142,10 +142,11 @@ export const toolSpecs: ToolSpec<z.ZodSchema>[] = [
 			if (userPreference.streamerInfo.length === 0) {
 				return []
 			}
-			logger.info('[getUserPreference] Fetching user preference', {
-				userPreference,
+			logger.info('[getUserPreference] User preference fetched', {
+				hasAccounts: userPreference.accounts?.length > 0,
+				accountCount: userPreference.accounts?.length || 0,
+				hasStreamerInfo: userPreference.streamerInfo?.length > 0,
 			})
-			logger.debug('[getUserPreference] User preference', { userPreference })
 			return scrubAccountIdentifiers(userPreference, displayMap)
 		},
 	},
