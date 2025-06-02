@@ -98,10 +98,9 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			kvLogger.debug(
 				{
 					keysCheckedCount: keysToCheck.length,
-					found: !!tokenData,
 					sourceKeyPrefix: sourceKey ? sanitizeKeyForLog(sourceKey) : 'none',
 				},
-				'Token lookup result',
+				'Token lookup completed',
 			)
 
 			// If we found a token under clientId but have a schwabUserId, migrate it
@@ -137,7 +136,7 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 
 			return tokenData
 		} catch (error) {
-			kvLogger.error({ error, ids }, 'Failed to load token from KV')
+			kvLogger.error({ error }, 'Failed to load token from KV')
 			return null
 		}
 	}
@@ -152,12 +151,9 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			const serialized = JSON.stringify(data)
 
 			await kv.put(key, serialized, { expirationTtl: TTL_31_DAYS })
-			kvLogger.debug(
-				{ keyPrefix: sanitizeKeyForLog(key), expiresAt: data.expiresAt },
-				'Token saved to KV',
-			)
+			kvLogger.debug({ keyPrefix: sanitizeKeyForLog(key) }, 'Token saved to KV')
 		} catch (error) {
-			kvLogger.error({ error, ids }, 'Failed to save token to KV')
+			kvLogger.error({ error }, 'Failed to save token to KV')
 			throw error
 		}
 	}
@@ -217,11 +213,11 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 				return false
 			}
 
-			const tokenData = JSON.parse(raw) as T
+			// Parse token data for migration
+			JSON.parse(raw) as T
 			kvLogger.debug(
 				{
 					fromKeyPrefix: sanitizeKeyForLog(fromKey),
-					hasToken: !!tokenData.accessToken,
 				},
 				'Migration source token found',
 			)
@@ -251,7 +247,7 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 			)
 			return true
 		} catch (error) {
-			kvLogger.error({ error, fromIds, toIds }, 'Token migration failed')
+			kvLogger.error({ error }, 'Token migration failed')
 			return false
 		}
 	}
@@ -281,8 +277,6 @@ export function makeKvTokenStore<T extends TokenData = TokenData>(
 						migrationError instanceof Error
 							? migrationError.message
 							: String(migrationError),
-					fromIds,
-					toIds,
 				},
 				'Token migration failed during migrateIfNeeded',
 			)

@@ -193,7 +193,6 @@ export const AuthErrors = {
 	},
 } as const
 
-
 interface JsonErrorResponse {
 	code: string
 	message: string
@@ -211,9 +210,8 @@ export function formatAuthError(
 	error: AuthError,
 	details?: Record<string, any>,
 ): ErrorResponse {
-	const includeStack = process.env.LOG_LEVEL?.toLowerCase() === 'debug'
 	let filtered = details
-	if (details && !includeStack) {
+	if (details) {
 		const { stack, ...rest } = details
 		filtered = rest
 	}

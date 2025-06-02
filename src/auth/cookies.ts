@@ -56,6 +56,14 @@ async function importKey(secret: string): Promise<CryptoKey> {
 	if (!secret) {
 		throw new AuthErrors.CookieSecretMissing()
 	}
+
+	// Validate minimum key length for security (32 characters = 256 bits)
+	if (secret.length < 32) {
+		throw new Error(
+			'Cookie encryption key must be at least 32 characters long for security',
+		)
+	}
+
 	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
 	return crypto.subtle.importKey(

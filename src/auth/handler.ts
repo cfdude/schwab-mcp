@@ -231,11 +231,10 @@ app.get('/callback', async (c) => {
 		oauthLogger.info(
 			'Exchanging authorization code for tokens with state parameter for PKCE',
 		)
-		let tokenSet
 		try {
 			// Pass the stateParam directly to EnhancedTokenManager.exchangeCode
 			// EnhancedTokenManager will handle extracting the code_verifier from it
-			tokenSet = await auth.exchangeCode(code, stateParam)
+			await auth.exchangeCode(code, stateParam)
 		} catch (exchangeError) {
 			oauthLogger.error('Token exchange failed', {
 				error: exchangeError,
@@ -247,14 +246,8 @@ app.get('/callback', async (c) => {
 			throw new AuthErrors.TokenExchange()
 		}
 
-		// Log token information (without sensitive details)
-		oauthLogger.info('Token exchange successful', {
-			hasAccessToken: !!tokenSet?.accessToken,
-			hasRefreshToken: !!tokenSet?.refreshToken,
-			expiresAt: tokenSet?.expiresAt
-				? new Date(tokenSet.expiresAt).toISOString()
-				: 'unknown',
-		})
+		// Log token exchange success (without sensitive details)
+		oauthLogger.info('Token exchange successful')
 
 		// Create API client (temporary for auth flow)
 		oauthLogger.info('Creating Schwab API client')
@@ -291,12 +284,6 @@ app.get('/callback', async (c) => {
 			throw new AuthErrors.NoUserId()
 		}
 
-		oauthLogger.debug('User preferences response', {
-			hasPreferences: !!userPreferences,
-			hasStreamerInfo: !!userPreferences?.streamerInfo,
-			streamerInfoCount: userPreferences?.streamerInfo?.length || 0,
-		})
-
 		const userIdFromSchwab =
 			userPreferences?.streamerInfo?.[0]?.schwabClientCorrelId
 
@@ -317,8 +304,12 @@ app.get('/callback', async (c) => {
 				// Save under schwabUserId key
 				await kvToken.save({ schwabUserId: userIdFromSchwab }, currentTokenData)
 				oauthLogger.info('Token migrated to schwabUserId key', {
-					fromKeyPrefix: sanitizeKeyForLog(kvToken.kvKey({ clientId: clientIdFromState })),
-					toKeyPrefix: sanitizeKeyForLog(kvToken.kvKey({ schwabUserId: userIdFromSchwab })),
+					fromKeyPrefix: sanitizeKeyForLog(
+						kvToken.kvKey({ clientId: clientIdFromState }),
+					),
+					toKeyPrefix: sanitizeKeyForLog(
+						kvToken.kvKey({ schwabUserId: userIdFromSchwab }),
+					),
 				})
 			}
 		} catch (migrationError) {
@@ -392,8 +383,6 @@ app.get('/callback', async (c) => {
 					? (error as SchwabApiError).code
 					: undefined,
 			sdkStatus: httpStatus,
-			url: (error as any).config?.url,
-			stack: error instanceof Error ? error.stack : undefined,
 			requestId,
 		})
 
@@ -403,10 +392,7 @@ app.get('/callback', async (c) => {
 			...(requestId && { requestId }),
 		})
 
-		const jsonResponse = createJsonErrorResponse(mcpError, requestId, {
-			sdkErrorCode: errorInfo.details?.sdkErrorCode,
-			url: errorInfo.details?.url,
-		})
+		const jsonResponse = createJsonErrorResponse(mcpError, requestId, {})
 
 		return c.json(jsonResponse, errorInfo.status as any)
 	}

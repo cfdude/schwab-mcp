@@ -11,13 +11,15 @@ import { logger } from '../shared/log'
  */
 class RedirectValidator {
 	private readonly allowedPatterns: RegExp[]
+	private readonly config: ValidatedEnv
 
-	constructor(patterns: string[]) {
+	constructor(patterns: string[], config: ValidatedEnv) {
 		// Validate all patterns before creating RegExp instances
 		// This ensures fail-fast behavior at initialization
 		validateRedirectPatterns(patterns)
 
 		this.allowedPatterns = patterns.map((pattern) => new RegExp(pattern))
+		this.config = config
 	}
 
 	/**
@@ -33,16 +35,18 @@ class RedirectValidator {
 
 			// Basic security checks
 			if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-				logger.warn(`Invalid protocol in redirect URI: ${uri}`)
+				logger.warn('Invalid protocol in redirect URI')
 				return false
 			}
 
 			// Don't allow localhost in production
+			const isProduction =
+				this.config.LOG_LEVEL !== 'debug' && this.config.LOG_LEVEL !== 'trace'
 			if (
-				process.env.NODE_ENV === 'production' &&
+				isProduction &&
 				(url.hostname === 'localhost' || url.hostname === '127.0.0.1')
 			) {
-				logger.warn(`Localhost redirect URI not allowed in production: ${uri}`)
+				logger.warn('Localhost redirect URI not allowed in production')
 				return false
 			}
 
@@ -52,12 +56,12 @@ class RedirectValidator {
 			)
 
 			if (!isAllowed) {
-				logger.warn(`Redirect URI not in allowlist: ${uri}`)
+				logger.warn('Redirect URI not in allowlist')
 			}
 
 			return isAllowed
 		} catch (error) {
-			logger.warn(`Invalid redirect URI format: ${uri}`, error)
+			logger.warn('Invalid redirect URI format', error)
 			return false
 		}
 	}
@@ -101,5 +105,5 @@ export function createRedirectValidator(
 		patterns.push(...additionalPatterns)
 	}
 
-	return new RedirectValidator(patterns)
+	return new RedirectValidator(patterns, config)
 }

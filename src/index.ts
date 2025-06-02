@@ -21,7 +21,6 @@ import {
 	CONTENT_TYPES,
 	APP_SERVER_NAME,
 } from './shared/constants'
-import { gatherDiagnostics } from './shared/diagnostics'
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
 import { logger, buildLogger, type PinoLogLevel } from './shared/log'
 import { sanitizeKeyForLog, logOnlyInDevelopment } from './shared/secureLogger'
@@ -92,11 +91,16 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			})
 
 			// Debug token IDs during initialization
-			logOnlyInDevelopment(this.mcpLogger, 'debug', '[MyMCP.init] Token identifiers', {
-				hasSchwabUserId: !!this.props.schwabUserId,
-				hasClientId: !!this.props.clientId,
-				expectedKeyPrefix: sanitizeKeyForLog(kvToken.kvKey(getTokenIds())),
-			})
+			logOnlyInDevelopment(
+				this.mcpLogger,
+				'debug',
+				'[MyMCP.init] Token identifiers',
+				{
+					hasSchwabUserId: !!this.props.schwabUserId,
+					hasClientId: !!this.props.clientId,
+					expectedKeyPrefix: sanitizeKeyForLog(kvToken.kvKey(getTokenIds())),
+				},
+			)
 
 			// Token save function uses KV store exclusively
 			const saveTokenForETM = async (tokenSet: TokenData) => {
@@ -283,20 +287,18 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				})
 			}
 
-			let diagnostics = {}
 			try {
-				diagnostics = await this.getDiagnostics()
-				this.mcpLogger.info('Token diagnostics during reconnection recovery', {
-					diagnostics,
+				this.mcpLogger.info('Token manager state during reconnection', {
+					hasTokenManager: !!this.tokenManager,
 				})
-			} catch (diagError) {
+			} catch (stateError) {
 				this.mcpLogger.warn(
-					'Failed to get diagnostics during reconnection recovery',
+					'Failed to check token manager state during reconnection',
 					{
 						error:
-							diagError instanceof Error
-								? diagError.message
-								: String(diagError),
+							stateError instanceof Error
+								? stateError.message
+								: String(stateError),
 					},
 				)
 			}
@@ -334,16 +336,6 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 		this.mcpLogger.info('SSE connection established or reconnected')
 		await this.onReconnect()
 		return await super.onSSE(event)
-	}
-
-	async getDiagnostics() {
-		return gatherDiagnostics({
-			tokenManager: this.tokenManager,
-			client: this.client,
-			validatedConfig: this.validatedConfig,
-			env: this.env,
-			props: this.props,
-		})
 	}
 }
 
