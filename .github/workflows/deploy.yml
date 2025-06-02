@@ -53,8 +53,25 @@ jobs:
         run: |
           cat > wrangler.deploy.jsonc << 'EOF'
           {
-            "extends": "./wrangler.base.jsonc",
+            "$schema": "node_modules/wrangler/config-schema.json",
             "name": "schwab-mcp",
+            "main": "src/index.ts",
+            "compatibility_date": "2025-04-17",
+            "compatibility_flags": ["nodejs_compat"],
+            "migrations": [
+              {
+                "new_sqlite_classes": ["MyMCP"],
+                "tag": "v1"
+              }
+            ],
+            "durable_objects": {
+              "bindings": [
+                {
+                  "class_name": "MyMCP",
+                  "name": "MCP_OBJECT"
+                }
+              ]
+            },
             "kv_namespaces": [
               {
                 "binding": "OAUTH_KV",
@@ -63,6 +80,11 @@ jobs:
             ],
             "observability": {
               "enabled": true
+            },
+            "dev": {
+              "port": 8788,
+              "local_protocol": "https",
+              "upstream_protocol": "https"
             }
           }
           EOF

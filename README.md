@@ -117,7 +117,6 @@ npm run deploy
 This repository is designed to work cleanly for both personal use and open source contribution:
 
 **📁 Files Structure:**
-- `wrangler.base.jsonc` - Clean base config (committed to repo)
 - `wrangler.example.jsonc` - Template for personal setup (committed to repo)
 - `wrangler.jsonc` - Your personal config (git-ignored)
 
