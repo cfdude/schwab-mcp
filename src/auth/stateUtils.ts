@@ -15,15 +15,9 @@ const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
  *
  * EnhancedTokenManager in @sudowealth/schwab-api handles PKCE flow internally:
  * 1. When getAuthorizationUrl is called, it generates code_verifier and code_challenge
- * 2. It embeds the code_verifier into the state parameter along with application state
+ * 2. It adds the code_verifier and other PKCE data directly to our application state
  * 3. In the OAuth callback, the full stateParam must be passed to exchangeCode method
  * 4. EnhancedTokenManager extracts the code_verifier from the state for the token exchange
- *
- * State flow:
- * - client.ts: redirectToSchwab() passes application state to ETM.getAuthorizationUrl()
- * - ETM combines application state with its own PKCE data
- * - handler.ts: /callback receives the state and passes it to ETM.exchangeCode()
- * - Our decodeAndVerifyState still works to extract application data after ETM processing
  */
 
 /**
@@ -32,11 +26,10 @@ const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
 export type StateData = StateDataFromSchema
 
 /**
- * Decodes and verifies a state parameter.
+ * Decodes and verifies a state parameter from OAuth callback.
  *
- * NOTE: This extracts the application-specific portion of the state after
- * EnhancedTokenManager has processed its PKCE-related data. The full original
- * stateParam should still be passed to ETM.exchangeCode() before using this function.
+ * EnhancedTokenManager adds PKCE fields (pkce_code_verifier, etc.) directly
+ * to our application state, so we just decode and validate the combined object.
  *
  * @param stateParam - The state parameter to decode and verify.
  * @returns The parsed state data with typed access to common fields, or null if decoding fails.

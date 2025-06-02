@@ -350,8 +350,8 @@ export async function parseRedirectApproval(
 
 		encodedState = stateParam
 
-		// The state from the approval form is simple base64-encoded JSON (not EnhancedTokenManager format)
-		// This is different from callback states which go through EnhancedTokenManager
+		// The state from the approval form is simple base64-encoded JSON
+		// Approval form states work the same as our simplified callback states
 		try {
 			const decodedStateString = atob(encodedState)
 			const parsedState = JSON.parse(decodedStateString)
