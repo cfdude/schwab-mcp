@@ -4,12 +4,10 @@ import {
 	GetQuotesRequestQueryParamsSchema,
 	GetQuoteBySymbolIdRequestParamsSchema,
 	GetTransactionsRequestQueryParams,
-} from '@sudowealth/schwab-api'
-import z from 'zod'
-import {
 	buildAccountDisplayMap,
 	scrubAccountIdentifiers,
-} from '../../shared/accountScrubber'
+} from '@sudowealth/schwab-api'
+import z from 'zod'
 import { logger } from '../../shared/log'
 import { type ToolSpec } from '../types'
 

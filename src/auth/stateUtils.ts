@@ -1,89 +1,62 @@
 import { type AuthRequest } from '@cloudflare/workers-oauth-provider'
-import { safeBase64Decode } from '@sudowealth/schwab-api'
+import {
+	decodeOAuthState,
+	validateOAuthState,
+	sanitizeError,
+} from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/log'
-import { sanitizeError } from '../shared/secureLogger'
 import { AuthErrors } from './errors'
 import { StateSchema, type StateData as StateDataFromSchema } from './schemas'
 
 // Create scoped logger for OAuth state operations
 const stateLogger = logger.child(LOGGER_CONTEXTS.STATE_UTILS)
 
-/**
- * IMPORTANT: EnhancedTokenManager State Handling
- *
- * EnhancedTokenManager in @sudowealth/schwab-api handles PKCE flow internally:
- * 1. When getAuthorizationUrl is called, it generates code_verifier and code_challenge
- * 2. It adds the code_verifier and other PKCE data directly to our application state
- * 3. In the OAuth callback, the full stateParam must be passed to exchangeCode method
- * 4. EnhancedTokenManager extracts the code_verifier from the state for the token exchange
- */
-
-/**
- * Re-export StateData type from schemas
- */
+// Re-export StateData type from schemas
 export type StateData = StateDataFromSchema
 
 /**
  * Decodes and verifies a state parameter from OAuth callback.
- *
- * EnhancedTokenManager adds PKCE fields (pkce_code_verifier, etc.) directly
- * to our application state, so we just decode and validate the combined object.
- *
- * @param stateParam - The state parameter to decode and verify.
- * @returns The parsed state data with typed access to common fields, or null if decoding fails.
+ * This wraps the SDK's decodeOAuthState with MCP-specific validation
  */
 export async function decodeAndVerifyState<T = AuthRequest>(
 	config: ValidatedEnv,
 	stateParam: string,
 ): Promise<T | null> {
 	try {
-		// The state parameter may be URL-encoded when received from query params
-		const decodedParam = stateParam.includes('%')
-			? decodeURIComponent(stateParam)
-			: stateParam
+		// Use SDK's decode function
+		const decoded = decodeOAuthState<T>(stateParam)
 
-		// The state from EnhancedTokenManager is always base64-encoded JSON
-		try {
-			const decodedState = safeBase64Decode(decodedParam)
-			const parsed = JSON.parse(decodedState)
-
-			// Check if this is a direct state with PKCE fields added by EnhancedTokenManager
-			if (parsed.responseType && parsed.clientId) {
-				stateLogger.debug(
-					'Processing state with PKCE fields from EnhancedTokenManager',
-				)
-				return StateSchema.parse(parsed) as T
-			}
-
-			// If we reach here, the state format is unexpected
-			stateLogger.error(
-				'Unexpected state format - missing required OAuth fields',
-			)
-			return null
-		} catch (error) {
-			stateLogger.error(
-				'[ERROR] Error in base64 decoding or JSON parsing:',
-				sanitizeError(error),
-			)
+		if (!decoded) {
+			stateLogger.error('Failed to decode state parameter')
 			return null
 		}
+
+		// Validate against MCP's schema
+		if (!validateOAuthState(decoded, StateSchema)) {
+			stateLogger.error('State validation failed against schema')
+			return null
+		}
+
+		// Check for required OAuth fields
+		const authRequest = decoded as any
+		if (authRequest.responseType && authRequest.clientId) {
+			stateLogger.debug('Processing valid OAuth state')
+			return decoded
+		}
+
+		stateLogger.error('Missing required OAuth fields in state')
+		return null
 	} catch (error) {
-		stateLogger.error(
-			'[ERROR] Error decoding state in decodeAndVerifyState:',
-			sanitizeError(error),
-		)
+		stateLogger.error('[ERROR] Error decoding state:', sanitizeError(error))
 		return null
 	}
 }
 
 /**
- * Extracts the client ID from a state object, handling different state structures.
- *
- * @param state - The decoded state object.
- * @returns The client ID from the state.
- * @throws Error if client ID cannot be extracted.
+ * Extracts the client ID from a state object
+ * This remains MCP-specific as it handles the local state structure
  */
 export function extractClientIdFromState(
 	state: StateData | AuthRequest,

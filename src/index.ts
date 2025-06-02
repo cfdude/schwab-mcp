@@ -2,6 +2,7 @@ import OAuthProvider from '@cloudflare/workers-oauth-provider'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
 	createApiClient,
+	sanitizeKeyForLog,
 	type SchwabApiClient,
 	type EnhancedTokenManager,
 	type SchwabApiLogger,
@@ -22,7 +23,7 @@ import {
 } from './shared/constants'
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
 import { logger, buildLogger, type PinoLogLevel } from './shared/log'
-import { sanitizeKeyForLog, logOnlyInDevelopment } from './shared/secureLogger'
+import { logOnlyInDevelopment } from './shared/secureLogger'
 import { createTool, toolError, toolSuccess } from './shared/toolBuilder'
 import { allToolSpecs, type ToolSpec } from './tools'
 

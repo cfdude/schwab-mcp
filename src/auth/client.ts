@@ -8,6 +8,7 @@ import {
 	type TokenData,
 	type EnhancedTokenManager,
 	type EnhancedTokenManagerOptions,
+	encodeOAuthState,
 } from '@sudowealth/schwab-api'
 import { type Context } from 'hono'
 import { type BlankInput } from 'hono/types'
@@ -54,12 +55,11 @@ export function initializeSchwabAuthClient(
 		redirectUri,
 		load: mappedLoad,
 		save: mappedSave,
-		// MCP-specific desired defaults for EnhancedTokenManager
-		validateTokens: true, // Validate tokens on load/use
-		autoReconnect: true, // Enable auto reconnection
-		debug: config.LOG_LEVEL === 'debug' || config.LOG_LEVEL === 'trace', // Only enable in debug mode
-		traceOperations: config.LOG_LEVEL === 'trace', // Only enable in trace mode
-		refreshThresholdMs: 5 * 60 * 1000, // 5 minutes before expiration
+		validateTokens: true,
+		autoReconnect: true,
+		debug: config.LOG_LEVEL === 'debug' || config.LOG_LEVEL === 'trace',
+		traceOperations: config.LOG_LEVEL === 'trace',
+		refreshThresholdMs: 5 * 60 * 1000,
 	}
 
 	// Configure auth with enhanced token manager
@@ -98,15 +98,8 @@ export async function redirectToSchwab(
 	try {
 		const auth = initializeSchwabAuthClient(config)
 
-		// Get the authorization URL with state parameter
-		// Pass application state to EnhancedTokenManager's getAuthorizationUrl
-		// The EnhancedTokenManager will:
-		// 1. Generate PKCE code_verifier and code_challenge
-		// 2. Embed our application state along with its code_verifier in the state parameter
-		// 3. Include code_challenge in the authorization URL as required by PKCE
-
-		// Use simple JSON encoding for state parameter
-		const encodedState = btoa(JSON.stringify(oauthReqInfo))
+		// Use SDK's OAuth state encoder
+		const encodedState = encodeOAuthState(oauthReqInfo)
 		const { authUrl } = await auth.getAuthorizationUrl({
 			state: encodedState,
 		})

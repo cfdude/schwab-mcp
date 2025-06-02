@@ -1,84 +1,19 @@
-import { AuthErrorCode as SchwabSDKAuthErrorCode } from '@sudowealth/schwab-api'
+import {
+	AuthErrorCode as SchwabSDKAuthErrorCode,
+	SchwabErrorMapper,
+} from '@sudowealth/schwab-api'
 import { AuthErrors, type AuthError } from './errors'
 
-interface ErrorMapping {
-	mcpError: () => AuthError
-	message: () => string
-	httpStatus: number
-}
-
-/**
- * Maps Schwab SDK error codes to MCP error classes and metadata
- * This replaces the large switch statement with a cleaner lookup table
- */
-const schwabErrorMap: Record<SchwabSDKAuthErrorCode, ErrorMapping> = {
-	[SchwabSDKAuthErrorCode.INVALID_CODE]: {
-		mcpError: () => new AuthErrors.TokenExchange(),
-		message: () =>
-			'Token exchange failed: Invalid authorization code or PKCE verification failed',
-		httpStatus: 400,
+// Create instance with MCP-specific mappings
+const errorMapper = new SchwabErrorMapper({
+	customAuthMappings: {
+		// Add any MCP-specific error mappings here if needed
 	},
-	[SchwabSDKAuthErrorCode.PKCE_VERIFIER_MISSING]: {
-		mcpError: () => new AuthErrors.TokenExchange(),
-		message: () =>
-			'Token exchange failed: Invalid authorization code or PKCE verification failed',
-		httpStatus: 400,
-	},
-	[SchwabSDKAuthErrorCode.TOKEN_EXPIRED]: {
-		mcpError: () => new AuthErrors.TokenExchange(),
-		message: () =>
-			'Token operation failed: Token expired, re-authentication required',
-		httpStatus: 401,
-	},
-	[SchwabSDKAuthErrorCode.UNAUTHORIZED]: {
-		mcpError: () => new AuthErrors.TokenExchange(),
-		message: () =>
-			'Authorization failed: Client unauthorized or invalid credentials',
-		httpStatus: 401,
-	},
-	[SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_LOAD_FAILED]: {
-		mcpError: () => new AuthErrors.AuthCallback(),
-		message: () =>
-			'Critical: Failed to load token data during authorization',
-		httpStatus: 500,
-	},
-	[SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_SAVE_FAILED]: {
-		mcpError: () => new AuthErrors.AuthCallback(),
-		message: () =>
-			'Critical: Failed to save token data during authorization',
-		httpStatus: 500,
-	},
-	[SchwabSDKAuthErrorCode.TOKEN_VALIDATION_ERROR]: {
-		mcpError: () => new AuthErrors.AuthCallback(),
-		message: () =>
-			'Critical: Token validation failed during authorization',
-		httpStatus: 500,
-	},
-	[SchwabSDKAuthErrorCode.TOKEN_ENDPOINT_CONFIG_ERROR]: {
-		mcpError: () => new AuthErrors.AuthCallback(),
-		message: () =>
-			'Critical: Auth system configuration error',
-		httpStatus: 500,
-	},
-	[SchwabSDKAuthErrorCode.REFRESH_NEEDED]: {
-		mcpError: () => new AuthErrors.ApiResponse(),
-		message: () => 'Failed to refresh token during API call',
-		httpStatus: 500,
-	},
-	[SchwabSDKAuthErrorCode.NETWORK]: {
-		mcpError: () => new AuthErrors.ApiResponse(),
-		message: () => 'Network error during authentication',
-		httpStatus: 503,
-	},
-	[SchwabSDKAuthErrorCode.UNKNOWN]: {
-		mcpError: () => new AuthErrors.AuthCallback(),
-		message: () => 'Unknown authentication error',
-		httpStatus: 500,
-	},
-}
+})
 
 /**
  * Maps a Schwab SDK error to the appropriate MCP error and metadata
+ * This is a thin wrapper around the SDK's error mapper
  */
 export function mapSchwabError(
 	code: SchwabSDKAuthErrorCode,
@@ -89,20 +24,43 @@ export function mapSchwabError(
 	detailMessage: string
 	httpStatus: number
 } {
-	const mapping = schwabErrorMap[code]
+	// Create a mock error object for the mapper
+	const mockError = {
+		code,
+		message: originalMessage,
+		status: schwabStatus,
+		isRetryable: () => false, // Will be determined by mapping
+	} as any
 
-	if (!mapping) {
-		// Default fallback for unmapped codes
-		return {
-			mcpError: new AuthErrors.AuthCallback(),
-			detailMessage: 'An authentication error occurred',
-			httpStatus: schwabStatus || 500,
-		}
+	const mapping = errorMapper.mapAuthError(mockError)
+
+	// Map the SDK error code to MCP error class
+	const mcpErrorMap: Record<string, () => AuthError> = {
+		[SchwabSDKAuthErrorCode.INVALID_CODE]: () => new AuthErrors.TokenExchange(),
+		[SchwabSDKAuthErrorCode.PKCE_VERIFIER_MISSING]: () =>
+			new AuthErrors.TokenExchange(),
+		[SchwabSDKAuthErrorCode.TOKEN_EXPIRED]: () =>
+			new AuthErrors.TokenExchange(),
+		[SchwabSDKAuthErrorCode.UNAUTHORIZED]: () => new AuthErrors.TokenExchange(),
+		[SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_LOAD_FAILED]: () =>
+			new AuthErrors.AuthCallback(),
+		[SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_SAVE_FAILED]: () =>
+			new AuthErrors.AuthCallback(),
+		[SchwabSDKAuthErrorCode.TOKEN_VALIDATION_ERROR]: () =>
+			new AuthErrors.AuthCallback(),
+		[SchwabSDKAuthErrorCode.TOKEN_ENDPOINT_CONFIG_ERROR]: () =>
+			new AuthErrors.AuthCallback(),
+		[SchwabSDKAuthErrorCode.REFRESH_NEEDED]: () => new AuthErrors.ApiResponse(),
+		[SchwabSDKAuthErrorCode.NETWORK]: () => new AuthErrors.ApiResponse(),
+		[SchwabSDKAuthErrorCode.UNKNOWN]: () => new AuthErrors.AuthCallback(),
 	}
 
+	const mcpErrorFactory =
+		mcpErrorMap[code] || (() => new AuthErrors.AuthCallback())
+
 	return {
-		mcpError: mapping.mcpError(),
-		detailMessage: mapping.message(),
-		httpStatus: schwabStatus || mapping.httpStatus,
+		mcpError: mcpErrorFactory(),
+		detailMessage: mapping.message,
+		httpStatus: mapping.httpStatus,
 	}
 }

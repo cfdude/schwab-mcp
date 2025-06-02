@@ -1,6 +1,8 @@
 import { type OAuthHelpers } from '@cloudflare/workers-oauth-provider'
 import {
 	createApiClient,
+	sanitizeKeyForLog,
+	sanitizeError,
 	SchwabAuthError,
 	SchwabApiError,
 	type TokenData,
@@ -11,7 +13,6 @@ import { getConfig } from '../config'
 import { LOGGER_CONTEXTS, APP_SERVER_NAME } from '../shared/constants'
 import { makeKvTokenStore } from '../shared/kvTokenStore'
 import { logger } from '../shared/log'
-import { sanitizeKeyForLog, sanitizeError } from '../shared/secureLogger'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
 import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
 import { mapSchwabError } from './errorMapping'
