@@ -23,7 +23,8 @@ import {
 	createJsonErrorResponse,
 } from './errors'
 import { decodeAndVerifyState, extractClientIdFromState } from './stateUtils'
-import { renderApprovalDialog } from './ui'
+import { renderApprovalDialog } from './ui/approvalDialog'
+import { APPROVAL_CONFIG } from './ui/config'
 
 // Create Hono app with appropriate bindings
 const app = new Hono<{ Bindings: Env & { OAUTH_PROVIDER: OAuthHelpers } }>()
@@ -38,7 +39,7 @@ const oauthLogger = logger.child(LOGGER_CONTEXTS.OAUTH_HANDLER)
  *
  * This endpoint checks if the client is already approved, and either:
  * 1. Redirects directly to Schwab if approved
- * 2. Shows an approval dialog if not approved
+ * 2. Shows the approval dialog
  */
 app.get('/authorize', async (c) => {
 	try {
@@ -65,14 +66,16 @@ app.get('/authorize', async (c) => {
 			return redirectToSchwab(c, config, oauthReqInfo)
 		}
 
-		// Otherwise, render the approval dialog
+		// Show approval dialog (Cloudflare style)
+		const clientInfo = await c.env.OAUTH_PROVIDER.lookupClient(clientId)
+		const serverInfo = {
+			name: APP_SERVER_NAME,
+			logo: APPROVAL_CONFIG.SHOW_LOGO ? APPROVAL_CONFIG.LOGO_URL : undefined,
+		}
+
 		return renderApprovalDialog(c.req.raw, {
-			client: await c.env.OAUTH_PROVIDER.lookupClient(clientId),
-			server: {
-				name: APP_SERVER_NAME,
-				description:
-					'Access your Schwab accounts and market data in MCP clients.',
-			},
+			client: clientInfo,
+			server: serverInfo,
 			state: { oauthReqInfo },
 			config,
 		})

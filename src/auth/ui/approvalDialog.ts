@@ -1,56 +1,39 @@
 import { type ClientInfo } from '@cloudflare/workers-oauth-provider'
 import { type ValidatedEnv } from '../../../types/env'
-import { createApprovalDialogHTML } from './templates'
+import { APPROVAL_CONFIG } from './config'
 
 /**
  * Configuration for the approval dialog
  */
 interface ApprovalDialogOptions {
 	/**
-	 * Client information to display in the approval dialog
+	 * Client information for basic display
 	 */
 	client: ClientInfo | null
 	/**
-	 * Server information to display in the approval dialog
+	 * Server information
 	 */
 	server: {
 		name: string
 		logo?: string
-		description?: string
 	}
 	/**
-	 * Arbitrary state data to pass through the approval flow
-	 * Will be encoded in the form and returned when approval is complete
+	 * State data to encode in the approval flow
 	 */
 	state: Record<string, any>
 	/**
-	 * Validated environment configuration for redirect validation
+	 * Validated environment configuration
 	 */
 	config: ValidatedEnv
 }
 
 /**
- * Sanitizes HTML content to prevent XSS attacks
- * @param unsafe - The unsafe string that might contain HTML
- * @returns A safe string with HTML special characters escaped
- */
-export function sanitizeHtml(unsafe: string): string {
-	return unsafe
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#039;')
-}
-
-/**
- * Renders an approval dialog for OAuth authorization
- * The dialog displays information about the client and server
- * and includes a form to submit approval
+ * Renders an approval page that redirects to Schwab OAuth
+ * Following Cloudflare's pattern of minimal custom UI
  *
  * @param request - The HTTP request
- * @param options - Configuration for the approval dialog
- * @returns A Response containing the HTML approval dialog
+ * @param options - Configuration for the approval
+ * @returns A Response containing HTML with auto-redirect
  */
 export function renderApprovalDialog(
 	request: Request,
@@ -58,34 +41,147 @@ export function renderApprovalDialog(
 ): Response {
 	const { client, server, state } = options
 
-	// Encode state for form submission
+	// Encode state for the redirect
 	const encodedState = btoa(JSON.stringify(state))
 
-	// Use the template to generate HTML
-	const htmlContent = createApprovalDialogHTML({
-		client: {
-			clientId: client?.clientId || 'unknown',
-			name: client?.clientName || 'Unknown MCP Client',
-			website: client?.clientUri,
-			logoUri: client?.logoUri,
-			policyUri: client?.policyUri,
-			tosUri: client?.tosUri,
-			redirectUris: client?.redirectUris || [],
-			contacts: client?.contacts,
-		},
-		server: {
-			name: server.name,
-			logoUri: server.logo,
-			description: server.description,
-		},
-		encodedState,
-		formActionPath: new URL(request.url).pathname,
-	})
+	const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Authorizing ${client?.clientName || 'MCP Client'}</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          margin: 0;
+          padding: 0;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .container {
+          background: white;
+          border-radius: 12px;
+          padding: 2rem;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+          text-align: center;
+          max-width: 400px;
+          width: 90%;
+        }
+        .logo {
+          width: 64px;
+          height: 64px;
+          margin: 0 auto 1rem;
+          border-radius: 12px;
+        }
+        h1 {
+          margin: 0 0 1rem 0;
+          color: #333;
+          font-size: 1.5rem;
+          font-weight: 600;
+        }
+        p {
+          color: #666;
+          margin: 0 0 2rem 0;
+          line-height: 1.5;
+        }
+        .btn {
+          background: #0070f3;
+          color: white;
+          border: none;
+          padding: 1rem 2rem;
+          border-radius: 8px;
+          font-size: 1rem;
+          font-weight: 500;
+          cursor: pointer;
+          width: 100%;
+          transition: background 0.2s;
+        }
+        .btn:hover {
+          background: #0051cc;
+        }
+        .spinner {
+          display: none;
+          width: 20px;
+          height: 20px;
+          border: 2px solid #ffffff40;
+          border-top: 2px solid #ffffff;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+          margin: 0 auto;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .auto-redirect {
+          color: #888;
+          font-size: 0.9rem;
+          margin-top: 1rem;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        ${server.logo ? `<img src="${server.logo}" alt="${server.name}" class="logo">` : ''}
+        <h1>Connect to ${server.name}</h1>
+        <p><strong>${client?.clientName || 'An MCP Client'}</strong> wants to access your Schwab account through ${server.name}.</p>
+        
+        <form method="post" action="${new URL(request.url).pathname}" id="approvalForm">
+          <input type="hidden" name="state" value="${encodedState}">
+          <button type="submit" class="btn" id="approveBtn">
+            <span id="btnText">Continue to Schwab</span>
+            <div class="spinner" id="spinner"></div>
+          </button>
+        </form>
+        
+        <p class="auto-redirect">Redirecting automatically in <span id="countdown">3</span> seconds...</p>
+      </div>
+
+      <script>
+        // Auto-submit after countdown
+        let countdown = ${APPROVAL_CONFIG.COUNTDOWN_SECONDS};
+        const countdownEl = document.getElementById('countdown');
+        const form = document.getElementById('approvalForm');
+        const btn = document.getElementById('approveBtn');
+        const btnText = document.getElementById('btnText');
+        const spinner = document.getElementById('spinner');
+        
+        const timer = setInterval(() => {
+          countdown--;
+          countdownEl.textContent = countdown;
+          if (countdown <= 0) {
+            clearInterval(timer);
+            submitForm();
+          }
+        }, 1000);
+        
+        // Handle manual click
+        form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          clearInterval(timer);
+          submitForm();
+        });
+        
+        function submitForm() {
+          btnText.style.display = 'none';
+          spinner.style.display = 'block';
+          btn.disabled = true;
+          form.submit();
+        }
+      </script>
+    </body>
+    </html>
+  `
 
 	return new Response(htmlContent, {
 		headers: {
 			'Content-Type': 'text/html; charset=utf-8',
-			'Content-Security-Policy': "default-src 'self'; img-src https: data:;",
+			'Content-Security-Policy':
+				"default-src 'self' 'unsafe-inline'; img-src https: data:;",
 		},
 	})
 }

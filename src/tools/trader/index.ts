@@ -13,7 +13,6 @@ import {
 	GetTransactionsParams,
 	GetTransactionByIdParams,
 	GetUserPreferenceParams,
-	type SchwabApiClient,
 } from '@sudowealth/schwab-api'
 import { logger } from '../../shared/log'
 import { createToolSpec } from '../types'
