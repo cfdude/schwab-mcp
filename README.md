@@ -41,13 +41,18 @@ providing:
 
 ## Features
 
-### Trading Tools (7 tools)
+### Trading Tools
 
 - **Account Management**
   - `getAccounts`: Retrieve all account information with positions and balances
   - `getAccountNumbers`: Get list of account identifiers
 - **Order Management**
+  - `getOrder`: Get order by ID
   - `getOrders`: Fetch orders with filtering by status, time range, and symbol
+  - `getOrdersByAccountNumber`: Get orders by account number
+  - `cancelOrder`: Cancel an order (Experimental)
+  - `placeOrder`: Place an order (Experimental)
+  - `replaceOrder`: Replace an order (Experimental)
 - **Market Quotes**
   - `getQuotes`: Get real-time quotes for multiple symbols
   - `getQuoteBySymbolId`: Get detailed quote for a single symbol
@@ -57,7 +62,7 @@ providing:
 - **User Preferences**
   - `getUserPreference`: Retrieve user trading preferences and settings
 
-### Market Data Tools (7 tools)
+### Market Data Tools
 
 - **Instrument Search**
   - `searchInstruments`: Search for securities by symbol with
@@ -121,7 +126,8 @@ npm run deploy
 - `wrangler.jsonc` - Your personal config (git-ignored, created from template)
 - `.dev.vars` - Local development secrets (git-ignored, optional)
 
-Since `wrangler.jsonc` is git-ignored, you can safely develop and test with your personal configuration without exposing secrets.
+Since `wrangler.jsonc` is git-ignored, you can safely develop and test with your
+personal configuration without exposing secrets.
 
 ### Detailed Configuration
 
@@ -146,7 +152,8 @@ For automated deployments, add these GitHub repository secrets:
 1. **`CLOUDFLARE_API_TOKEN`**: Your Cloudflare API token
 2. **`OAUTH_KV_ID`**: Your KV namespace ID
 
-The workflow handles validation and deployment when pushing to `main`. Cloudflare secrets must still be set via `wrangler secret`.
+The workflow handles validation and deployment when pushing to `main`.
+Cloudflare secrets must still be set via `wrangler secret`.
 
 ### Testing with Inspector
 
@@ -292,7 +299,6 @@ The server implements robust error handling with specific error types:
 - **Server Errors (500)**: API failures, configuration issues
 - **Network Errors (503)**: Automatic retry with backoff
 - All errors include request IDs for Schwab API troubleshooting
-
 
 ## Contributing
 
