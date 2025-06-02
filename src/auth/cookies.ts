@@ -1,9 +1,7 @@
 import {
 	decodeOAuthState,
-	createHmacKey,
-	signData,
-	verifySignature,
-	sanitizeError,
+	createCookieTokenStore,
+	type CookieTokenStoreOptions,
 } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
 import {
@@ -22,93 +20,29 @@ const cookieLogger = logger.child(LOGGER_CONTEXTS.COOKIES)
 const MCP_APPROVAL = COOKIE_NAMES.APPROVED_CLIENTS
 const ONE_YEAR_IN_SECONDS = 60 * 60 * 24 * 365
 
-// --- Cookie-specific functions ---
+// Initialize cookie store for approved clients
+let approvalCookieStore: ReturnType<typeof createCookieTokenStore> | null = null
 
 /**
- * Creates a signed cookie string in the format "signature.base64(payload)".
- * Uses SDK crypto utilities
+ * Get or create the approval cookie store
  */
-async function createSignedCookie(
-	payload: any,
-	secret: string,
-): Promise<string> {
-	const stringifiedPayload = JSON.stringify(payload)
-	const key = await createHmacKey(secret)
-	const signature = await signData(key, stringifiedPayload)
-
-	// Simple base64 encoding for the payload
-	const base64Payload = Buffer.from(stringifiedPayload).toString('base64')
-	return `${signature}.${base64Payload}`
-}
-
-/**
- * Verifies and decodes a signed cookie value.
- * Uses SDK crypto utilities
- */
-async function verifyAndDecodeCookie<T>(
-	cookieValue: string | undefined,
-	secret: string,
-): Promise<T | undefined> {
-	if (!cookieValue) return undefined
-
-	const parts = cookieValue.split('.')
-	if (parts.length !== 2) {
-		const error = new AuthErrors.InvalidCookieFormat()
-		cookieLogger.warn(error.message)
-		return undefined
+function getApprovalCookieStore(secret: string) {
+	if (!approvalCookieStore) {
+		const options: CookieTokenStoreOptions = {
+			encryptionKey: secret,
+			cookieName: MCP_APPROVAL,
+			cookieOptions: {
+				httpOnly: true,
+				secure: true,
+				sameSite: 'strict',
+				maxAge: ONE_YEAR_IN_SECONDS,
+				path: '/',
+			},
+			validateOnLoad: false, // We'll validate with Zod schema
+		}
+		approvalCookieStore = createCookieTokenStore(options)
 	}
-
-	const [signatureHex, base64Payload] = parts
-
-	// Decode the payload
-	let payloadString: string
-	try {
-		payloadString = Buffer.from(base64Payload!, 'base64').toString('utf-8')
-	} catch (e) {
-		cookieLogger.warn('Invalid base64 payload in cookie:', sanitizeError(e))
-		return undefined
-	}
-
-	// Verify signature using SDK utilities
-	const key = await createHmacKey(secret)
-	const isValid = await verifySignature(key, signatureHex!, payloadString)
-
-	if (!isValid) {
-		const error = new AuthErrors.CookieSignature()
-		cookieLogger.warn(error.message)
-		return undefined
-	}
-
-	// Parse JSON
-	try {
-		return JSON.parse(payloadString) as T
-	} catch (e) {
-		cookieLogger.error('Error parsing cookie payload:', sanitizeError(e))
-		return undefined
-	}
-}
-
-/**
- * Parses a cookie string and extracts the value of the specified cookie.
- */
-function extractCookieValue(
-	cookieHeader: string | null,
-	cookieName: string,
-): string | undefined {
-	if (!cookieHeader) return undefined
-
-	const cookies = cookieHeader.split(';').map((c) => c.trim())
-	const targetCookie = cookies.find((c) => c.startsWith(`${cookieName}=`))
-
-	if (!targetCookie) return undefined
-	return targetCookie.substring(cookieName.length + 1)
-}
-
-/**
- * Creates a Set-Cookie header value for the approval cookie.
- */
-function createApprovalCookieHeader(cookieValue: string): string {
-	return `${MCP_APPROVAL}=${cookieValue}; HttpOnly; Secure; Path=/; SameSite=Strict; Max-Age=${ONE_YEAR_IN_SECONDS}`
+	return approvalCookieStore
 }
 
 /**
@@ -118,23 +52,28 @@ async function parseApprovalCookie(
 	cookieHeader: string | null,
 	secret: string,
 ): Promise<string[] | undefined> {
-	const cookieValue = extractCookieValue(cookieHeader, MCP_APPROVAL)
-	const approvedClients = await verifyAndDecodeCookie<string[]>(
-		cookieValue,
-		secret,
-	)
+	const store = getApprovalCookieStore(secret)
 
-	// Validate with Zod schema
-	if (approvedClients) {
-		try {
-			return ApprovedClientsSchema.parse(approvedClients)
-		} catch (e) {
-			cookieLogger.warn('Cookie payload validation failed:', sanitizeError(e))
+	try {
+		// Use store's load method which handles verification
+		const data = await store.load(cookieHeader)
+
+		if (!data) {
 			return undefined
 		}
-	}
 
-	return approvedClients
+		// We store the client IDs as a JSON string in the accessToken field
+		try {
+			const approvedClients = JSON.parse(data.accessToken)
+			return ApprovedClientsSchema.parse(approvedClients)
+		} catch (e) {
+			cookieLogger.warn('Cookie payload validation failed:', e)
+			return undefined
+		}
+	} catch (error) {
+		cookieLogger.error('Error parsing approval cookie:', error)
+		return undefined
+	}
 }
 
 /**
@@ -144,11 +83,18 @@ async function setApprovalCookie(
 	approvedClients: string[],
 	secret: string,
 ): Promise<string> {
-	const cookieValue = await createSignedCookie(approvedClients, secret)
-	return createApprovalCookieHeader(cookieValue)
-}
+	const store = getApprovalCookieStore(secret)
 
-// --- Exported Functions (remain the same) ---
+	// We're abusing the TokenData interface a bit here
+	// Store the approved clients as a JSON string in the accessToken field
+	const pseudoTokenData = {
+		accessToken: JSON.stringify(approvedClients), // Store as JSON string
+		refreshToken: '',
+		expiresAt: Date.now() + ONE_YEAR_IN_SECONDS * 1000,
+	}
+
+	return await store.save(pseudoTokenData)
+}
 
 export async function clientIdAlreadyApproved(
 	request: Request,
@@ -190,19 +136,35 @@ export async function parseRedirectApproval(
 
 		encodedState = stateParam
 
-		// Use SDK's OAuth state decoder
-		const decodedState = decodeOAuthState<StateData>(encodedState)
-		if (!decodedState) {
-			throw new AuthErrors.InvalidState()
+		// The approval dialog uses btoa() to encode the state, which is standard base64
+		// We should use atob() to decode it, not the OAuth state decoder
+		// This matches how the state is encoded in src/auth/ui/approvalDialog.ts
+		let decodedState: StateData
+		try {
+			const decodedStateJson = atob(encodedState)
+			decodedState = JSON.parse(decodedStateJson) as StateData
+		} catch {
+			// If standard base64 decoding fails, try the OAuth decoder as fallback
+			cookieLogger.warn('Standard base64 decode failed, trying OAuth decoder')
+			const oauthDecoded = decodeOAuthState<StateData>(encodedState)
+			if (!oauthDecoded) {
+				throw new AuthErrors.InvalidState()
+			}
+			decodedState = oauthDecoded
 		}
 
 		state = decodedState
 		clientId = extractClientIdFromState(state)
 	} catch (e) {
-		cookieLogger.error('Error processing form submission:', sanitizeError(e))
-		throw new Error(
-			`Failed to parse approval form: ${e instanceof Error ? e.message : String(e)}`,
-		)
+		cookieLogger.error('Error processing form submission:', e)
+		if (
+			e instanceof AuthErrors.InvalidState ||
+			e instanceof AuthErrors.MissingFormState ||
+			e instanceof AuthErrors.ClientIdExtraction
+		) {
+			throw e
+		}
+		throw new AuthErrors.CookieDecode(e instanceof Error ? e : undefined)
 	}
 
 	// Get existing approved clients

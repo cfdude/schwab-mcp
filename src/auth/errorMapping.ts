@@ -1,19 +1,61 @@
 import {
 	AuthErrorCode as SchwabSDKAuthErrorCode,
 	SchwabErrorMapper,
+	type ErrorMapper,
+	type ErrorMappingResult,
 } from '@sudowealth/schwab-api'
 import { AuthErrors, type AuthError } from './errors'
 
+// Create custom MCP error mapper
+class MCPErrorMapper implements ErrorMapper {
+	map(error: unknown): ErrorMappingResult | null {
+		// Handle MCP-specific errors
+		if (error instanceof AuthErrors.MissingClientId) {
+			return {
+				code: SchwabSDKAuthErrorCode.INVALID_CONFIGURATION,
+				message: 'Client ID is required',
+				httpStatus: 400,
+				isRetryable: false,
+				requiresReauth: false,
+			}
+		}
+
+		if (error instanceof AuthErrors.CookieSecretMissing) {
+			return {
+				code: SchwabSDKAuthErrorCode.INVALID_CONFIGURATION,
+				message: 'Cookie encryption key is not configured',
+				httpStatus: 500,
+				isRetryable: false,
+				requiresReauth: false,
+			}
+		}
+
+		// Return null to let default mapper handle it
+		return null
+	}
+}
+
 // Create instance with MCP-specific mappings
 const errorMapper = new SchwabErrorMapper({
+	customMappers: [new MCPErrorMapper()],
 	customAuthMappings: {
-		// Add any MCP-specific error mappings here if needed
-	},
+		// Override specific mappings for MCP context
+		[SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_LOAD_FAILED]: {
+			message: 'Failed to load tokens from KV storage',
+			httpStatus: 503,
+			isRetryable: true,
+		},
+		[SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_SAVE_FAILED]: {
+			message: 'Failed to save tokens to KV storage',
+			httpStatus: 503,
+			isRetryable: true,
+		},
+	} as any,
 })
 
 /**
  * Maps a Schwab SDK error to the appropriate MCP error and metadata
- * This is a thin wrapper around the SDK's error mapper
+ * Now uses the enhanced SDK error mapper
  */
 export function mapSchwabError(
 	code: SchwabSDKAuthErrorCode,
@@ -29,10 +71,10 @@ export function mapSchwabError(
 		code,
 		message: originalMessage,
 		status: schwabStatus,
-		isRetryable: () => false, // Will be determined by mapping
+		isRetryable: () => false,
 	} as any
 
-	const mapping = errorMapper.mapAuthError(mockError)
+	const mapping = errorMapper.map(mockError)
 
 	// Map the SDK error code to MCP error class
 	const mcpErrorMap: Record<string, () => AuthError> = {
