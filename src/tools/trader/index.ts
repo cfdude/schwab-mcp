@@ -45,7 +45,12 @@ export const toolSpecs = [
 			logger.info('[getAccountNumbers] Fetching account numbers')
 			const accounts = await c.trader.accounts.getAccountNumbers(p)
 			const displayMap = await buildAccountDisplayMap(c)
-			return accounts.map((acc) => displayMap[acc.accountNumber])
+			return accounts.map((acc) => {
+				return {
+					accountDisplay: displayMap[acc.accountNumber],
+					hashValue: acc.hashValue,
+				}
+			})
 		},
 	}),
 	createToolSpec({
@@ -53,12 +58,8 @@ export const toolSpecs = [
 		description: 'Get account',
 		schema: GetAccountByNumberParams,
 		call: async (c, p) => {
-			const hashedAccountNumber = await getHashedAccountNumber({
-				c,
-				accountNumber: p.accountNumber,
-			})
 			const account = await c.trader.accounts.getAccountByNumber({
-				pathParams: { accountNumber: hashedAccountNumber },
+				pathParams: { accountNumber: p.accountNumber },
 			})
 			const displayMap = await buildAccountDisplayMap(c)
 			return scrubAccountIdentifiers(account, displayMap)
@@ -209,18 +210,3 @@ export const toolSpecs = [
 		},
 	}),
 ] as const
-
-async function getHashedAccountNumber({
-	c,
-	accountNumber,
-}: {
-	c: SchwabApiClient
-	accountNumber: string
-}) {
-	const accounts = await c.trader.accounts.getAccountNumbers()
-	if (accounts.length === 0) throw new Error('No accounts found')
-	const account = accounts.find((acc) => acc.accountNumber === accountNumber)
-	if (!account) throw new Error('Account not found')
-	if (!account.hashValue) throw new Error('Account hash not found')
-	return account.hashValue
-}
