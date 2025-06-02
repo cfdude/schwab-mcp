@@ -69,28 +69,41 @@ export async function decodeAndVerifyState<T = AuthRequest>(
 			? decodeURIComponent(stateParam)
 			: stateParam
 
-		// Try to decode as JWT format first
-		try {
-			const payload = await verifyState<Record<string, unknown>>(
-				config.COOKIE_ENCRYPTION_KEY,
-				decodedParam,
-			)
-			// Validate with Zod schema
-			return StateSchema.parse(payload) as T
-		} catch (jwtError) {
-			// If JWT verification fails, try legacy format
-			stateLogger.info(
-				'State not in JWT format, trying legacy decoding:',
-				jwtError instanceof Error ? jwtError.message : 'Unknown error',
-			)
-		}
-
-		// Legacy format: direct base64 encoded JSON
+		// The state from EnhancedTokenManager is always base64-encoded JSON
 		try {
 			const decodedState = safeBase64Decode(decodedParam)
 			const parsed = JSON.parse(decodedState)
-			// Validate with Zod schema
-			return StateSchema.parse(parsed) as T
+
+			// EnhancedTokenManager always wraps our state in this format
+			if (
+				parsed.original_app_state &&
+				typeof parsed.original_app_state === 'string'
+			) {
+				stateLogger.debug('Processing EnhancedTokenManager wrapped state')
+
+				// The original_app_state contains our JWT token
+				try {
+					const appStatePayload = await verifyState<Record<string, unknown>>(
+						config.COOKIE_ENCRYPTION_KEY,
+						parsed.original_app_state,
+					)
+					return StateSchema.parse(appStatePayload) as T
+				} catch (appStateError) {
+					stateLogger.error('Failed to decode original_app_state JWT:', {
+						error:
+							appStateError instanceof Error
+								? appStateError.message
+								: String(appStateError),
+					})
+					return null
+				}
+			}
+
+			// If we reach here, the state format is unexpected
+			stateLogger.error(
+				'Unexpected state format - missing original_app_state field',
+			)
+			return null
 		} catch (error) {
 			stateLogger.error(
 				'[ERROR] Error in base64 decoding or JSON parsing:',

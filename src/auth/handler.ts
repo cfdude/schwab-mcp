@@ -144,6 +144,7 @@ app.post('/authorize', async (c) => {
 app.get('/callback', async (c) => {
 	try {
 		const config = getConfig(c.env)
+
 		// Extract state and code from query parameters
 		const stateParam = c.req.query('state')
 		const code = c.req.query('code')
@@ -169,6 +170,7 @@ app.get('/callback', async (c) => {
 			config,
 			stateParam,
 		)
+
 		if (!decodedStateAsAuthRequest) {
 			const error = new AuthErrors.InvalidState()
 			const errorInfo = formatAuthError(error)
