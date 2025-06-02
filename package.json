@@ -8,6 +8,7 @@
   },
   "scripts": {
     "deploy": "wrangler deploy",
+    "deploy:local": "wrangler deploy --config wrangler.local.jsonc",
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "cf-typegen": "wrangler types",

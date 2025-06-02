@@ -53,3 +53,4 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --binding OAUTH_KV=${{ secrets.OAUTH_KV_ID }}

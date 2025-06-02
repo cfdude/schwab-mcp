@@ -22,12 +22,6 @@
 			},
 		],
 	},
-	"kv_namespaces": [
-		{
-			"binding": "OAUTH_KV",
-			"id": "127dd0549d56440483682532b2a5bfca",
-		},
-	],
 	"observability": {
 		"enabled": false, // Set to true for production monitoring (has costs)
 	},

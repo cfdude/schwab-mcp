@@ -1,10 +1,13 @@
 # Schwab MCP Server
 
-A Model Context Protocol (MCP) server that enables AI assistants like Claude to securely interact with Charles Schwab accounts and market data through the official Schwab API.
+A Model Context Protocol (MCP) server that enables AI assistants like Claude to
+securely interact with Charles Schwab accounts and market data through the
+official Schwab API.
 
 ## What You Can Do
 
 Ask Claude to:
+
 - "Show me my Schwab account balances and positions"
 - "Get real-time quotes for AAPL, GOOGL, and MSFT"
 - "What are today's market movers in the $SPX?"
@@ -49,16 +52,19 @@ providing:
   - `getQuotes`: Get real-time quotes for multiple symbols
   - `getQuoteBySymbolId`: Get detailed quote for a single symbol
 - **Transaction History**
-  - `getTransactions`: Retrieve transaction history across all accounts with date filtering
+  - `getTransactions`: Retrieve transaction history across all accounts with
+    date filtering
 - **User Preferences**
   - `getUserPreference`: Retrieve user trading preferences and settings
 
 ### Market Data Tools (7 tools)
 
 - **Instrument Search**
-  - `searchInstruments`: Search for securities by symbol with fundamental/reference data
+  - `searchInstruments`: Search for securities by symbol with
+    fundamental/reference data
 - **Price History**
-  - `getPriceHistory`: Get historical price data with customizable periods and frequencies
+  - `getPriceHistory`: Get historical price data with customizable periods and
+    frequencies
 - **Market Hours**
   - `getMarketHours`: Check market operating hours by date
   - `getMarketHoursByMarketId`: Get specific market information
@@ -72,13 +78,43 @@ providing:
 
 1. **Schwab Developer Account**: Register at
    [Schwab Developer Portal](https://developer.schwab.com)
-2. **Cloudflare Account**: For deployment (Workers paid plan required for Durable Objects)
+2. **Cloudflare Account**: For deployment (Workers paid plan required for
+   Durable Objects)
 3. **Node.js**: Version 22.x or higher
 4. **Wrangler CLI**: Installed via npm (included in dev dependencies)
 
 ## Getting Started
 
-### Installation
+### Quick Setup
+
+```bash
+git clone <repository-url>
+cd schwab-mcp
+npm install
+
+# Authenticate with Cloudflare (first time only)
+npx wrangler login
+
+# Create KV namespace
+npx wrangler kv:namespace create "OAUTH_KV"
+
+# Set up local configuration
+cp wrangler.example.local.jsonc wrangler.local.jsonc
+# Edit wrangler.local.jsonc with your KV namespace ID
+
+# Set your secrets
+npx wrangler secret put SCHWAB_CLIENT_ID
+npx wrangler secret put SCHWAB_CLIENT_SECRET
+npx wrangler secret put SCHWAB_REDIRECT_URI
+npx wrangler secret put COOKIE_ENCRYPTION_KEY
+
+# Deploy locally
+npm run deploy:local
+```
+
+### Detailed Setup
+
+#### Installation
 
 ```bash
 git clone <repository-url>
@@ -89,9 +125,9 @@ npm install
 npx wrangler login
 ```
 
-### Configuration
+#### Configuration
 
-#### 1. Create a Schwab App
+##### 1. Create a Schwab App
 
 1. Log in to the [Schwab Developer Portal](https://developer.schwab.com)
 2. Create a new app with:
@@ -101,30 +137,51 @@ npx wrangler login
    - **App Type**: Personal or third-party based on your use case
 3. Note your **App Key** (Client ID) and generate an **App Secret**
 
-#### 2. Set up KV Namespace
+##### 2. Set up KV Namespace
 
 ```bash
 # Create the KV namespace for storing OAuth tokens
 npx wrangler kv:namespace create "OAUTH_KV"
 
 # This will output something like:
-# ✨ Successfully created KV namespace with ID: <your-namespace-id>
+# ✨ Successfully created KV namespace with ID: abc123def456...
 ```
 
-Update `wrangler.jsonc` with your generated KV namespace ID:
+**For Local Development:**
 
-```jsonc
-{
-  "kv_namespaces": [
-    {
-      "binding": "OAUTH_KV",
-      "id": "<your-namespace-id>" // Replace with your actual ID
-    }
-  ]
-}
-```
+1. Copy the local configuration template:
 
-#### 3. Set Environment Variables
+   ```bash
+   cp wrangler.example.local.jsonc wrangler.local.jsonc
+   ```
+
+2. Update `wrangler.local.jsonc` with your KV namespace ID:
+   ```jsonc
+   {
+   	"extends": "./wrangler.jsonc",
+   	"kv_namespaces": [
+   		{
+   			"binding": "OAUTH_KV",
+   			"id": "your-kv-namespace-id-here",
+   		},
+   	],
+   }
+   ```
+
+**For Production Deployment (GitHub Actions):**
+
+The main `wrangler.jsonc` file intentionally excludes the KV namespace ID for
+security. Instead, set it as a GitHub secret:
+
+1. Go to your GitHub repository → Settings → Secrets and variables → Actions
+2. Add a new repository secret:
+   - **Name**: `OAUTH_KV_ID`
+   - **Value**: Your KV namespace ID from step 1
+
+The GitHub Actions workflow will automatically use this secret during
+deployment.
+
+##### 3. Set Environment Variables
 
 ```bash
 # Set production secrets via Wrangler
@@ -137,24 +194,51 @@ npx wrangler secret put COOKIE_ENCRYPTION_KEY # Generate with: openssl rand -hex
 npx wrangler secret put LOG_LEVEL             # DEBUG, INFO, WARN, or ERROR
 ```
 
-### Deployment
+#### Deployment
+
+##### Local Deployment
+
+For local development and testing:
 
 ```bash
-# Deploy to Cloudflare Workers
-npx wrangler deploy
+# Deploy using your local KV configuration
+npm run deploy:local
 
 # The deployment will output your worker URL:
 # ✨ Successfully published your script to
 # https://schwab-mcp.<your-subdomain>.workers.dev
 ```
 
+##### Production Deployment via GitHub Actions
+
+The repository includes automated deployment via GitHub Actions. When you push
+to the `main` branch:
+
+1. **Validation**: Runs TypeScript checks and linting
+2. **Deployment**: Automatically deploys to Cloudflare Workers using secrets
+
+**Required GitHub Secrets:**
+
+- `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token
+- `OAUTH_KV_ID`: Your KV namespace ID
+
+**Manual Production Deployment:**
+
+If you need to deploy manually to production:
+
+```bash
+# Deploy with environment variable
+OAUTH_KV_ID="your-kv-namespace-id" npx wrangler deploy --binding OAUTH_KV=$OAUTH_KV_ID
+```
+
 Verify your deployment:
+
 ```bash
 # Check the health endpoint
 curl https://schwab-mcp.<your-subdomain>.workers.dev/health
 ```
 
-### Testing with Inspector
+#### Testing with Inspector
 
 Test your deployment using the MCP Inspector:
 
@@ -248,7 +332,7 @@ Connect to `http://localhost:8788/sse` using the MCP Inspector for testing.
 
 1. **OAuth 2.0 with PKCE**: Secure authentication flow preventing authorization
    code interception
-2. **Enhanced Token Management**: 
+2. **Enhanced Token Management**:
    - Centralized KV token store with automatic migration
    - Automatic token refresh (5 minutes before expiration)
    - 31-day token persistence with TTL
@@ -263,12 +347,13 @@ Connect to `http://localhost:8788/sse` using the MCP Inspector for testing.
 ### Available Scripts
 
 ```bash
-npm run dev        # Start development server on port 8788
-npm run deploy     # Deploy to Cloudflare Workers
-npm run typecheck  # Run TypeScript type checking
-npm run lint       # Run ESLint with automatic fixes
-npm run format     # Format code with Prettier
-npm run validate   # Run typecheck and lint together
+npm run dev          # Start development server on port 8788
+npm run deploy       # Deploy to Cloudflare Workers (production)
+npm run deploy:local # Deploy using local KV configuration
+npm run typecheck    # Run TypeScript type checking
+npm run lint         # Run ESLint with automatic fixes
+npm run format       # Format code with Prettier
+npm run validate     # Run typecheck and lint together
 ```
 
 ### Debugging
@@ -280,6 +365,7 @@ The server includes comprehensive logging with configurable levels:
 - **Log Levels**: DEBUG, INFO, WARN, ERROR (set via LOG_LEVEL env var)
 
 Enable debug logging to see detailed OAuth flow and API interactions:
+
 ```bash
 # For local development
 echo "LOG_LEVEL=DEBUG" >> .dev.vars
@@ -315,28 +401,35 @@ MIT
 ### Common Issues
 
 1. **"KV namespace not found" error**
+
    - Ensure you created the KV namespace and updated `wrangler.jsonc`
    - Run `npx wrangler kv:namespace list` to verify
 
 2. **Authentication failures**
+
    - Verify your redirect URI matches exactly in Schwab app settings
    - Check that all secrets are set correctly with `npx wrangler secret list`
    - Enable debug logging to see detailed OAuth flow
 
 3. **"Durable Objects not available" error**
+
    - Ensure you have a paid Cloudflare Workers plan
    - Durable Objects are not available on the free tier
 
 4. **Token refresh issues**
    - The server automatically refreshes tokens 5 minutes before expiration
    - Tokens are migrated from clientId to schwabUserId keys automatically
-   - Check KV namespace for stored tokens: `npx wrangler kv:key list --namespace-id=<your-id>`
+   - Check KV namespace for stored tokens:
+     `npx wrangler kv:key list --namespace-id=<your-id>`
 
 ## Recent Updates
 
-- **Enhanced Token Management**: Centralized KV token store prevents token divergence
-- **Improved Security**: HMAC-SHA256 state validation and automatic secret redaction
-- **Better Error Handling**: Structured error types with Schwab API error mapping
+- **Enhanced Token Management**: Centralized KV token store prevents token
+  divergence
+- **Improved Security**: HMAC-SHA256 state validation and automatic secret
+  redaction
+- **Better Error Handling**: Structured error types with Schwab API error
+  mapping
 - **Configurable Logging**: Debug mode for troubleshooting OAuth and API issues
 
 ## Acknowledgments
