@@ -334,5 +334,4 @@ export default new OAuthProvider({
 	defaultHandler: SchwabHandler as any, // Cast remains
 	authorizeEndpoint: API_ENDPOINTS.AUTHORIZE,
 	tokenEndpoint: API_ENDPOINTS.TOKEN,
-	clientRegistrationEndpoint: API_ENDPOINTS.REGISTER,
 })
