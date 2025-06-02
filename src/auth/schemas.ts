@@ -7,11 +7,6 @@ import { z } from 'zod'
 export const ApprovedClientsSchema = z.array(z.string())
 
 /**
- * Type for the approved clients array
- */
-export type ApprovedClients = z.infer<typeof ApprovedClientsSchema>
-
-/**
  * Schema for OAuth request information
  * Matches the AuthRequest interface from @cloudflare/workers-oauth-provider
  */

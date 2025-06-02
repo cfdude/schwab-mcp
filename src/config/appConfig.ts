@@ -149,8 +149,3 @@ export const getConfig = (() => {
 		return cachedConfig
 	}
 })()
-
-// Keep backward compatibility
-export function buildConfig(env: Env): ValidatedEnv {
-	return getConfig(env)
-}

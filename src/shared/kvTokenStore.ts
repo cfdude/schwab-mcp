@@ -17,7 +17,7 @@ export interface TokenIdentifiers {
  * Single source of truth for OAuth tokens, eliminating dual storage
  * in DO props and KV that can lead to token divergence.
  */
-export interface KvTokenStore<T extends TokenData = TokenData> {
+interface KvTokenStore<T extends TokenData = TokenData> {
 	load(ids: TokenIdentifiers): Promise<T | null>
 	save(ids: TokenIdentifiers, data: T): Promise<void>
 	kvKey(ids: TokenIdentifiers): string

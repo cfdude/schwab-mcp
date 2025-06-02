@@ -17,7 +17,6 @@ import {
 	LOGGER_CONTEXTS,
 	TOOL_NAMES,
 	ENVIRONMENTS,
-	LOG_LEVELS,
 	CONTENT_TYPES,
 	APP_SERVER_NAME,
 } from './shared/constants'

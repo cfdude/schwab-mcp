@@ -95,67 +95,37 @@ npm install
 # Authenticate with Cloudflare (first time only)
 npx wrangler login
 
-# Create KV namespace
+# Create KV namespace for OAuth token storage
 npx wrangler kv:namespace create "OAUTH_KV"
+# Note the ID from the output - you'll need it for configuration
 
-# Set up personal configuration
+# Set up your personal configuration
 cp wrangler.example.jsonc wrangler.jsonc
-# Edit wrangler.jsonc with your KV namespace ID and personal name
+# Edit wrangler.jsonc to:
+# 1. Replace YOUR_KV_NAMESPACE_ID_HERE with the ID from above
+# 2. Change the name to something unique (e.g., "schwab-mcp-yourname")
 
 # Set your secrets
-npx wrangler secret put SCHWAB_CLIENT_ID
-npx wrangler secret put SCHWAB_CLIENT_SECRET
-npx wrangler secret put SCHWAB_REDIRECT_URI
-npx wrangler secret put COOKIE_ENCRYPTION_KEY
+npx wrangler secret put SCHWAB_CLIENT_ID      # Your Schwab App Key
+npx wrangler secret put SCHWAB_CLIENT_SECRET  # Your Schwab App Secret
+npx wrangler secret put SCHWAB_REDIRECT_URI   # https://your-worker-name.workers.dev/callback
+npx wrangler secret put COOKIE_ENCRYPTION_KEY # Generate with: openssl rand -hex 32
 
 # Deploy
 npm run deploy
 ```
 
-### Personal vs Open Source Usage
+### Configuration Notes
 
-This repository is designed to work cleanly for both personal use and open source contribution:
+- `wrangler.example.jsonc` - Template configuration (committed)
+- `wrangler.jsonc` - Your personal config (git-ignored, created from template)
+- `.dev.vars` - Local development secrets (git-ignored, optional)
 
-**📁 Files Structure:**
-- `wrangler.example.jsonc` - Template for personal setup (committed to repo)
-- `wrangler.jsonc` - Your personal config (git-ignored)
+Since `wrangler.jsonc` is git-ignored, you can safely develop and test with your personal configuration without exposing secrets.
 
-**🏠 For Personal Use:**
-```bash
-# Copy the template and customize
-cp wrangler.example.jsonc wrangler.jsonc
+### Detailed Configuration
 
-# Edit wrangler.jsonc to add:
-# 1. Your KV namespace ID
-# 2. A unique name (e.g., "schwab-mcp-yourname")
-
-# Deploy normally
-npm run deploy
-```
-
-**🔄 For Contributing:**
-Since `wrangler.jsonc` is git-ignored, you can:
-- Develop features using your personal config
-- Test with your own Schwab account
-- Commit code changes without exposing secrets
-- Your personal deployment won't conflict with others
-
-### Detailed Setup
-
-#### Installation
-
-```bash
-git clone <repository-url>
-cd schwab-mcp
-npm install
-
-# Authenticate with Cloudflare (first time only)
-npx wrangler login
-```
-
-#### Configuration
-
-##### 1. Create a Schwab App
+#### 1. Create a Schwab App
 
 1. Log in to the [Schwab Developer Portal](https://developer.schwab.com)
 2. Create a new app with:
@@ -165,108 +135,20 @@ npx wrangler login
    - **App Type**: Personal or third-party based on your use case
 3. Note your **App Key** (Client ID) and generate an **App Secret**
 
-##### 2. Set up KV Namespace
+#### 2. Set Environment Variables
 
-```bash
-# Create the KV namespace for storing OAuth tokens
-npx wrangler kv:namespace create "OAUTH_KV"
+The same secrets from Quick Setup need to be set (see above).
 
-# This will output something like:
-# ✨ Successfully created KV namespace with ID: abc123def456...
-```
+### GitHub Actions Deployment
 
-**For Local Development:**
+For automated deployments, add these GitHub repository secrets:
 
-1. Copy the local configuration template:
+1. **`CLOUDFLARE_API_TOKEN`**: Your Cloudflare API token
+2. **`OAUTH_KV_ID`**: Your KV namespace ID
 
-   ```bash
-   cp wrangler.example.local.jsonc wrangler.local.jsonc
-   ```
+The workflow handles validation and deployment when pushing to `main`. Cloudflare secrets must still be set via `wrangler secret`.
 
-2. Update `wrangler.local.jsonc` with your KV namespace ID:
-   ```jsonc
-   {
-   	"extends": "./wrangler.jsonc",
-   	"kv_namespaces": [
-   		{
-   			"binding": "OAUTH_KV",
-   			"id": "your-kv-namespace-id-here",
-   		},
-   	],
-   }
-   ```
-
-**For Production Deployment (GitHub Actions):**
-
-The main `wrangler.jsonc` file intentionally excludes the KV namespace ID for
-security. Instead, set it as a GitHub secret:
-
-1. Go to your GitHub repository → Settings → Secrets and variables → Actions
-2. Add a new repository secret:
-   - **Name**: `OAUTH_KV_ID`
-   - **Value**: Your KV namespace ID from step 1
-
-The GitHub Actions workflow will automatically use this secret during
-deployment.
-
-##### 3. Set Environment Variables
-
-```bash
-# Set production secrets via Wrangler
-npx wrangler secret put SCHWAB_CLIENT_ID      # Your Schwab App Key
-npx wrangler secret put SCHWAB_CLIENT_SECRET  # Your Schwab App Secret
-npx wrangler secret put SCHWAB_REDIRECT_URI   # https://schwab-mcp.<your-subdomain>.workers.dev/callback
-npx wrangler secret put COOKIE_ENCRYPTION_KEY # Generate with: openssl rand -hex 32
-
-# Optional: Set log level (defaults to INFO)
-npx wrangler secret put LOG_LEVEL             # DEBUG, INFO, WARN, or ERROR
-```
-
-#### Deployment
-
-##### Local Deployment
-
-For local development and testing:
-
-```bash
-# Deploy using your local KV configuration
-npm run deploy:local
-
-# The deployment will output your worker URL:
-# ✨ Successfully published your script to
-# https://schwab-mcp.<your-subdomain>.workers.dev
-```
-
-##### Production Deployment via GitHub Actions
-
-The repository includes automated deployment via GitHub Actions. When you push
-to the `main` branch:
-
-1. **Validation**: Runs TypeScript checks and linting
-2. **Deployment**: Automatically deploys to Cloudflare Workers using secrets
-
-**Required GitHub Secrets:**
-
-- `CLOUDFLARE_API_TOKEN`: Your Cloudflare API token
-- `OAUTH_KV_ID`: Your KV namespace ID
-
-**Manual Production Deployment:**
-
-If you need to deploy manually to production:
-
-```bash
-# Deploy with environment variable
-OAUTH_KV_ID="your-kv-namespace-id" npx wrangler deploy --binding OAUTH_KV=$OAUTH_KV_ID
-```
-
-Verify your deployment:
-
-```bash
-# Check the health endpoint
-curl https://schwab-mcp.<your-subdomain>.workers.dev/health
-```
-
-#### Testing with Inspector
+### Testing with Inspector
 
 Test your deployment using the MCP Inspector:
 
@@ -376,8 +258,7 @@ Connect to `http://localhost:8788/sse` using the MCP Inspector for testing.
 
 ```bash
 npm run dev          # Start development server on port 8788
-npm run deploy       # Deploy to Cloudflare Workers (production)
-npm run deploy:local # Deploy using local KV configuration
+npm run deploy       # Deploy to Cloudflare Workers
 npm run typecheck    # Run TypeScript type checking
 npm run lint         # Run ESLint with automatic fixes
 npm run format       # Format code with Prettier
@@ -411,6 +292,7 @@ The server implements robust error handling with specific error types:
 - **Server Errors (500)**: API failures, configuration issues
 - **Network Errors (503)**: Automatic retry with backoff
 - All errors include request IDs for Schwab API troubleshooting
+
 
 ## Contributing
 

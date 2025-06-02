@@ -1,10 +1,11 @@
 import jwt from '@tsndr/cloudflare-worker-jwt'
 import { LOGGER_CONTEXTS } from '../../shared/constants'
 import { logger } from '../../shared/log'
+import { sanitizeError } from '../../shared/secureLogger'
 
 const jwtLogger = logger.child(LOGGER_CONTEXTS.JWT)
 
-export type StateTokenPayload<T = Record<string, unknown>> = T & {
+type StateTokenPayload<T = Record<string, unknown>> = T & {
 	iat?: number
 	exp?: number
 }
@@ -32,7 +33,7 @@ export async function signState<T extends Record<string, unknown>>(
 	try {
 		return await jwt.sign(tokenPayload, secret)
 	} catch (error) {
-		jwtLogger.error('[ERROR] Error signing JWT:', error)
+		jwtLogger.error('[ERROR] Error signing JWT:', sanitizeError(error))
 		throw new Error('Failed to sign JWT')
 	}
 }
@@ -73,7 +74,7 @@ export async function verifyState<T extends Record<string, unknown>>(
 			decoded.payload as StateTokenPayload<T>
 		return originalPayload as T
 	} catch (error) {
-		jwtLogger.error('[ERROR] Error verifying JWT:', error)
+		jwtLogger.error('[ERROR] Error verifying JWT:', sanitizeError(error))
 
 		// Re-throw with more specific error messages
 		if (error instanceof Error) {

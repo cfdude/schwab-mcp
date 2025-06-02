@@ -15,7 +15,7 @@ export type PinoLogLevel =
 	| 'fatal'
 
 // Logger type that matches our existing interface
-export interface AppLogger {
+interface AppLogger {
 	debug: (message: string, data?: any, contextId?: string) => void
 	info: (message: string, data?: any, contextId?: string) => void
 	warn: (message: string, data?: any, contextId?: string) => void
@@ -24,7 +24,7 @@ export interface AppLogger {
 }
 
 // Child logger interface
-export interface ChildLogger {
+interface ChildLogger {
 	debug: (message: string, data?: any, contextId?: string) => void
 	info: (message: string, data?: any, contextId?: string) => void
 	warn: (message: string, data?: any, contextId?: string) => void
@@ -188,6 +188,3 @@ export function buildLogger(level: PinoLogLevel = 'info'): AppLogger {
 // Create singleton logger instance with default level
 // This will be reconfigured in MyMCP.init() with the actual level from config
 export const logger = buildLogger('info')
-
-// Export type for compatibility
-export type { AppLogger as AppLoggerType }

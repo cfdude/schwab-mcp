@@ -11,7 +11,7 @@ import { getConfig } from '../config'
 import { LOGGER_CONTEXTS, APP_SERVER_NAME } from '../shared/constants'
 import { makeKvTokenStore } from '../shared/kvTokenStore'
 import { logger } from '../shared/log'
-import { sanitizeKeyForLog } from '../shared/secureLogger'
+import { sanitizeKeyForLog, sanitizeError } from '../shared/secureLogger'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
 import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
 import { mapSchwabError } from './errorMapping'
@@ -78,7 +78,7 @@ app.get('/authorize', async (c) => {
 	} catch (error) {
 		const authError = new AuthErrors.AuthRequest()
 		const errorInfo = formatAuthError(authError, { error })
-		oauthLogger.error(errorInfo.message, { error })
+		oauthLogger.error(errorInfo.message, { error: sanitizeError(error) })
 		const jsonResponse = createJsonErrorResponse(authError)
 		return c.json(jsonResponse, errorInfo.status as any)
 	}
@@ -115,7 +115,7 @@ app.post('/authorize', async (c) => {
 					scope: !authRequestForSchwab?.scope,
 				},
 			})
-			oauthLogger.error(errorInfo.message, errorInfo.details)
+			oauthLogger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(
 				error,
 				undefined,
@@ -128,7 +128,7 @@ app.post('/authorize', async (c) => {
 	} catch (error) {
 		const authError = new AuthErrors.AuthApproval()
 		const errorInfo = formatAuthError(authError, { error })
-		oauthLogger.error(errorInfo.message, { error })
+		oauthLogger.error(errorInfo.message, { error: sanitizeError(error) })
 		const jsonResponse = createJsonErrorResponse(authError)
 		return c.json(jsonResponse, errorInfo.status as any)
 	}
@@ -154,7 +154,7 @@ app.get('/callback', async (c) => {
 				hasState: !!stateParam,
 				hasCode: !!code,
 			})
-			oauthLogger.error(errorInfo.message, errorInfo.details)
+			oauthLogger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(
 				error,
 				undefined,
@@ -194,7 +194,7 @@ app.get('/callback', async (c) => {
 				detail:
 					'Decoded state object from Schwab callback is missing required AuthRequest fields (clientId, redirectUri, or scope).',
 			})
-			oauthLogger.error(errorInfo.message, errorInfo.details)
+			oauthLogger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(
 				error,
 				undefined,
@@ -236,7 +236,7 @@ app.get('/callback', async (c) => {
 			await auth.exchangeCode(code, stateParam)
 		} catch (exchangeError) {
 			oauthLogger.error('Token exchange failed', {
-				error: exchangeError,
+				error: sanitizeError(exchangeError),
 				message:
 					exchangeError instanceof Error
 						? exchangeError.message
@@ -258,7 +258,7 @@ app.get('/callback', async (c) => {
 			})
 		} catch (clientError) {
 			oauthLogger.error('Failed to create API client', {
-				error: clientError,
+				error: sanitizeError(clientError),
 				message:
 					clientError instanceof Error
 						? clientError.message
@@ -274,7 +274,7 @@ app.get('/callback', async (c) => {
 			userPreferences = await client.trader.userPreference.getUserPreference()
 		} catch (preferencesError) {
 			oauthLogger.error('Failed to fetch user preferences', {
-				error: preferencesError,
+				error: sanitizeError(preferencesError),
 				message:
 					preferencesError instanceof Error
 						? preferencesError.message
@@ -386,7 +386,6 @@ app.get('/callback', async (c) => {
 		})
 
 		oauthLogger.error(`Auth callback failed: ${errorInfo.message}`, {
-			...errorInfo.details,
 			errorType: mcpError.constructor.name,
 			...(requestId && { requestId }),
 		})

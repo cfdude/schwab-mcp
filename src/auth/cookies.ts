@@ -6,6 +6,7 @@ import {
 	HTTP_HEADERS,
 } from '../shared/constants'
 import { logger } from '../shared/log'
+import { sanitizeError } from '../shared/secureLogger'
 import { AuthErrors } from './errors'
 import { ApprovedClientsSchema } from './schemas'
 import {
@@ -64,6 +65,22 @@ async function importKey(secret: string): Promise<CryptoKey> {
 		)
 	}
 
+	// Check for basic entropy requirements - ensure it's not all the same character
+	const uniqueChars = new Set(secret).size
+	if (uniqueChars < 8) {
+		throw new Error(
+			'Cookie encryption key must have sufficient entropy (at least 8 unique characters)',
+		)
+	}
+
+	// Warn if key appears to be weak (e.g., simple patterns)
+	const isSimplePattern = /^(.)\1*$|^(01|10|abc|123|password|secret)+$/i.test(secret)
+	if (isSimplePattern) {
+		throw new Error(
+			'Cookie encryption key appears to use a weak pattern. Use a cryptographically secure random string.',
+		)
+	}
+
 	// TextEncoder always uses UTF-8 encoding
 	const enc = new TextEncoder()
 	return crypto.subtle.importKey(
@@ -114,7 +131,7 @@ async function verifySignature(
 			enc.encode(data),
 		)
 	} catch (e) {
-		cookieLogger.error('Error verifying signature:', e)
+		cookieLogger.error('Error verifying signature:', sanitizeError(e))
 		return false
 	}
 }
@@ -175,7 +192,7 @@ async function verifyAndDecodeCookie<T>(
 		}
 		payloadString = safeBase64Decode(base64Payload)
 	} catch (e) {
-		cookieLogger.warn('Invalid base64 payload in cookie:', e)
+		cookieLogger.warn('Invalid base64 payload in cookie:', sanitizeError(e))
 		return undefined
 	}
 
@@ -197,7 +214,7 @@ async function verifyAndDecodeCookie<T>(
 	try {
 		return JSON.parse(payloadString) as T
 	} catch (e) {
-		cookieLogger.error('Error parsing cookie payload:', e)
+		cookieLogger.error('Error parsing cookie payload:', sanitizeError(e))
 		return undefined
 	}
 }
@@ -248,7 +265,7 @@ async function parseApprovalCookie(
 		try {
 			return ApprovedClientsSchema.parse(approvedClients)
 		} catch (e) {
-			cookieLogger.warn('Cookie payload validation failed:', e)
+			cookieLogger.warn('Cookie payload validation failed:', sanitizeError(e))
 			return undefined
 		}
 	}
@@ -344,7 +361,7 @@ export async function parseRedirectApproval(
 		state = decodedState
 		clientId = extractClientIdFromState(state)
 	} catch (e) {
-		cookieLogger.error('Error processing form submission:', e)
+		cookieLogger.error('Error processing form submission:', sanitizeError(e))
 		// Rethrow with centralized error format
 		throw new Error(
 			`Failed to parse approval form: ${e instanceof Error ? e.message : String(e)}`,

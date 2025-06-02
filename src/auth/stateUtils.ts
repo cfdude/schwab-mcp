@@ -3,6 +3,7 @@ import { safeBase64Decode } from '@sudowealth/schwab-api'
 import { type ValidatedEnv } from '../../types/env'
 import { LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/log'
+import { sanitizeError } from '../shared/secureLogger'
 import { AuthErrors } from './errors'
 import { StateSchema, type StateData as StateDataFromSchema } from './schemas'
 import { signState, verifyState } from './utils/jwt'
@@ -93,14 +94,14 @@ export async function decodeAndVerifyState<T = AuthRequest>(
 		} catch (error) {
 			stateLogger.error(
 				'[ERROR] Error in base64 decoding or JSON parsing:',
-				error,
+				sanitizeError(error),
 			)
 			return null
 		}
 	} catch (error) {
 		stateLogger.error(
 			'[ERROR] Error decoding state in decodeAndVerifyState:',
-			error,
+			sanitizeError(error),
 		)
 		return null
 	}

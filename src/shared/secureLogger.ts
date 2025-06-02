@@ -1,6 +1,6 @@
 const isProduction = () => process.env.NODE_ENV === 'production'
 
-export function sanitizeForLog(obj: any): any {
+function sanitizeForLog(obj: any): any {
 	if (obj === null || obj === undefined) {
 		return obj
 	}
@@ -74,43 +74,39 @@ export function logOnlyInDevelopment(
 	}
 }
 
-export function createSecureLogger(logger: any) {
-	return {
-		debug: (message: string, data?: any) => {
-			if (isProduction() && data && containsSensitiveData(data)) {
-				logger.debug(message, sanitizeForLog(data))
-			} else {
-				logger.debug(message, data)
-			}
-		},
-		info: (message: string, data?: any) => {
-			logger.info(message, data ? sanitizeForLog(data) : undefined)
-		},
-		warn: (message: string, data?: any) => {
-			logger.warn(message, data ? sanitizeForLog(data) : undefined)
-		},
-		error: (message: string, data?: any) => {
-			logger.error(message, data ? sanitizeForLog(data) : undefined)
-		},
+/**
+ * Sanitizes error objects for safe logging
+ * Removes sensitive data while preserving useful debugging information
+ */
+export function sanitizeError(error: unknown): Record<string, any> {
+	if (!error || typeof error !== 'object') {
+		return { message: String(error) }
 	}
-}
 
-function containsSensitiveData(data: any): boolean {
-	if (!data || typeof data !== 'object') return false
+	const err = error as any
+	const sanitized: Record<string, any> = {}
 
-	const dataStr = JSON.stringify(data).toLowerCase()
-	const sensitivePatterns = [
-		'schwab',
-		'client',
-		'token',
-		'key',
-		'secret',
-		'password',
-		'authorization',
-		'cookie',
-		'account',
-		'hash',
-	]
+	// Safe properties to include
+	const safeProps = ['name', 'code', 'statusCode', 'status', 'type']
+	for (const prop of safeProps) {
+		if (prop in err) {
+			sanitized[prop] = err[prop]
+		}
+	}
 
-	return sensitivePatterns.some((pattern) => dataStr.includes(pattern))
+	// Sanitize message - remove potential sensitive data patterns
+	if ('message' in err) {
+		sanitized.message = sanitizeForLog(String(err.message))
+	}
+
+	// Handle stack traces - only include in development
+	if ('stack' in err && !isProduction()) {
+		// Remove file paths that might reveal system structure
+		sanitized.stack = String(err.stack)
+			.split('\n')
+			.slice(0, 5) // Limit stack trace depth
+			.join('\n')
+	}
+
+	return sanitized
 }

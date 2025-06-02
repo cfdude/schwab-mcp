@@ -1,6 +1,6 @@
 // Auth error definitions using class hierarchy
 
-export type AuthErrorKind =
+type AuthErrorKind =
 	| 'MissingClientId'
 	| 'MissingState'
 	| 'MissingParameters'

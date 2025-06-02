@@ -3,7 +3,7 @@ import { AuthErrors, type AuthError } from './errors'
 
 interface ErrorMapping {
 	mcpError: () => AuthError
-	message: (originalMessage: string) => string
+	message: () => string
 	httpStatus: number
 }
 
@@ -14,65 +14,65 @@ interface ErrorMapping {
 const schwabErrorMap: Record<SchwabSDKAuthErrorCode, ErrorMapping> = {
 	[SchwabSDKAuthErrorCode.INVALID_CODE]: {
 		mcpError: () => new AuthErrors.TokenExchange(),
-		message: (msg) =>
-			`Token exchange failed: Invalid authorization code or PKCE issue. Details: ${msg}`,
+		message: () =>
+			'Token exchange failed: Invalid authorization code or PKCE verification failed',
 		httpStatus: 400,
 	},
 	[SchwabSDKAuthErrorCode.PKCE_VERIFIER_MISSING]: {
 		mcpError: () => new AuthErrors.TokenExchange(),
-		message: (msg) =>
-			`Token exchange failed: Invalid authorization code or PKCE issue. Details: ${msg}`,
+		message: () =>
+			'Token exchange failed: Invalid authorization code or PKCE verification failed',
 		httpStatus: 400,
 	},
 	[SchwabSDKAuthErrorCode.TOKEN_EXPIRED]: {
 		mcpError: () => new AuthErrors.TokenExchange(),
-		message: (msg) =>
-			`Token operation failed: Token expired, re-authentication required. Details: ${msg}`,
+		message: () =>
+			'Token operation failed: Token expired, re-authentication required',
 		httpStatus: 401,
 	},
 	[SchwabSDKAuthErrorCode.UNAUTHORIZED]: {
 		mcpError: () => new AuthErrors.TokenExchange(),
-		message: (msg) =>
-			`Authorization failed: Client unauthorized or invalid credentials. Details: ${msg}`,
+		message: () =>
+			'Authorization failed: Client unauthorized or invalid credentials',
 		httpStatus: 401,
 	},
 	[SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_LOAD_FAILED]: {
 		mcpError: () => new AuthErrors.AuthCallback(),
-		message: (msg) =>
-			`Critical: Failed to load token data during authorization. Details: ${msg}`,
+		message: () =>
+			'Critical: Failed to load token data during authorization',
 		httpStatus: 500,
 	},
 	[SchwabSDKAuthErrorCode.TOKEN_PERSISTENCE_SAVE_FAILED]: {
 		mcpError: () => new AuthErrors.AuthCallback(),
-		message: (msg) =>
-			`Critical: Failed to save token data during authorization. Details: ${msg}`,
+		message: () =>
+			'Critical: Failed to save token data during authorization',
 		httpStatus: 500,
 	},
 	[SchwabSDKAuthErrorCode.TOKEN_VALIDATION_ERROR]: {
 		mcpError: () => new AuthErrors.AuthCallback(),
-		message: (msg) =>
-			`Critical: Token validation failed during authorization. Details: ${msg}`,
+		message: () =>
+			'Critical: Token validation failed during authorization',
 		httpStatus: 500,
 	},
 	[SchwabSDKAuthErrorCode.TOKEN_ENDPOINT_CONFIG_ERROR]: {
 		mcpError: () => new AuthErrors.AuthCallback(),
-		message: (msg) =>
-			`Critical: Auth system configuration error. Details: ${msg}`,
+		message: () =>
+			'Critical: Auth system configuration error',
 		httpStatus: 500,
 	},
 	[SchwabSDKAuthErrorCode.REFRESH_NEEDED]: {
 		mcpError: () => new AuthErrors.ApiResponse(),
-		message: (msg) => `Failed to refresh token during API call: ${msg}`,
+		message: () => 'Failed to refresh token during API call',
 		httpStatus: 500,
 	},
 	[SchwabSDKAuthErrorCode.NETWORK]: {
 		mcpError: () => new AuthErrors.ApiResponse(),
-		message: (msg) => `Network error during authentication: ${msg}`,
+		message: () => 'Network error during authentication',
 		httpStatus: 503,
 	},
 	[SchwabSDKAuthErrorCode.UNKNOWN]: {
 		mcpError: () => new AuthErrors.AuthCallback(),
-		message: (msg) => `Unknown authentication error: ${msg}`,
+		message: () => 'Unknown authentication error',
 		httpStatus: 500,
 	},
 }
@@ -95,14 +95,14 @@ export function mapSchwabError(
 		// Default fallback for unmapped codes
 		return {
 			mcpError: new AuthErrors.AuthCallback(),
-			detailMessage: `An authentication error occurred: ${originalMessage}`,
+			detailMessage: 'An authentication error occurred',
 			httpStatus: schwabStatus || 500,
 		}
 	}
 
 	return {
 		mcpError: mapping.mcpError(),
-		detailMessage: mapping.message(originalMessage),
+		detailMessage: mapping.message(),
 		httpStatus: schwabStatus || mapping.httpStatus,
 	}
 }
