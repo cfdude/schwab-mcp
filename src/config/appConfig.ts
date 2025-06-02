@@ -134,8 +134,10 @@ export const getConfig = (() => {
 
 	return (env: Env): ValidatedEnv => {
 		// Create a simple hash of the env object for memoization
+		// Exclude OAUTH_PROVIDER to avoid circular reference issues
 		const envHash = JSON.stringify(
 			Object.keys(env)
+				.filter((key) => key !== 'OAUTH_PROVIDER') // Exclude circular reference
 				.sort()
 				.map((key) => [key, (env as any)[key]]),
 		)
