@@ -14,7 +14,8 @@ import { LOGGER_CONTEXTS, APP_SERVER_NAME } from '../shared/constants'
 import { makeKvTokenStore } from '../shared/kvTokenStore'
 import { logger } from '../shared/log'
 import { initializeSchwabAuthClient, redirectToSchwab } from './client'
-import { clientIdAlreadyApproved, parseRedirectApproval } from './cookies'
+import { parseRedirectApproval } from './cookies'
+import { isClientApproved, approveClient } from './kvApprovalStore'
 import { mapSchwabError } from './errorMapping'
 import {
 	AuthErrors,
@@ -55,14 +56,8 @@ app.get('/authorize', async (c) => {
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
 
-		// If client ID is already approved, redirect directly to Schwab
-		if (
-			await clientIdAlreadyApproved(
-				c.req.raw,
-				oauthReqInfo.clientId,
-				config.COOKIE_ENCRYPTION_KEY,
-			)
-		) {
+		// If client ID is already approved (checked in KV), redirect directly to Schwab
+		if (await isClientApproved(config.OAUTH_KV, oauthReqInfo.clientId)) {
 			return redirectToSchwab(c, config, oauthReqInfo)
 		}
 
@@ -127,6 +122,9 @@ app.post('/authorize', async (c) => {
 			)
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
+
+		// Store the approved client ID in KV for future sessions
+		await approveClient(config.OAUTH_KV, authRequestForSchwab.clientId)
 
 		return redirectToSchwab(c, config, authRequestForSchwab, headers)
 	} catch (error) {
