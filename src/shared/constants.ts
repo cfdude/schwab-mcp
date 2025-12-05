@@ -67,4 +67,6 @@ export const CONTENT_TYPES = {
  * KV Token Store Constants
  */
 export const TOKEN_KEY_PREFIX = 'token:' as const
+export const APPROVED_CLIENTS_KEY = 'approved-clients' as const
 export const TTL_31_DAYS = 31 * 24 * 60 * 60
+export const TTL_1_YEAR = 365 * 24 * 60 * 60
