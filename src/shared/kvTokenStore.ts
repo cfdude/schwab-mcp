@@ -10,6 +10,7 @@ import { logger } from './log'
 export interface KvTokenStore<T = any> {
 	load(ids: TokenIdentifiers): Promise<T | null>
 	save(ids: TokenIdentifiers, data: T): Promise<void>
+	clear(ids: TokenIdentifiers): Promise<void>
 	kvKey(ids: TokenIdentifiers): string
 	migrate(fromIds: TokenIdentifiers, toIds: TokenIdentifiers): Promise<boolean>
 	migrateIfNeeded(
@@ -36,6 +37,11 @@ export function makeKvTokenStore<T = any>(kv: KVNamespace): KvTokenStore<T> {
 		},
 		save: async (ids: TokenIdentifiers, data: T) => {
 			await sdkStore.save(ids, data as any)
+		},
+		clear: async (ids: TokenIdentifiers) => {
+			const key = sdkStore.generateKey(ids)
+			logger.info('Clearing token from KV', { key })
+			await kv.delete(key)
 		},
 		kvKey: (ids: TokenIdentifiers) => {
 			return sdkStore.generateKey(ids)

@@ -56,8 +56,12 @@ app.get('/authorize', async (c) => {
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
 
-		// If client ID is already approved (checked in KV), redirect directly to Schwab
-		if (await isClientApproved(config.OAUTH_KV, oauthReqInfo.clientId)) {
+		// Check if the Schwab app has been approved before (using stable SCHWAB_CLIENT_ID, not random mcp-remote clientId)
+		// This ensures users only need to approve once, regardless of which mcp-remote session they use
+		if (await isClientApproved(config.OAUTH_KV, config.SCHWAB_CLIENT_ID)) {
+			oauthLogger.debug('Schwab app already approved, redirecting to Schwab OAuth', {
+				schwabClientId: config.SCHWAB_CLIENT_ID.substring(0, 8) + '...',
+			})
 			return redirectToSchwab(c, config, oauthReqInfo)
 		}
 
@@ -123,8 +127,12 @@ app.post('/authorize', async (c) => {
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
 
-		// Store the approved client ID in KV for future sessions
-		await approveClient(config.OAUTH_KV, authRequestForSchwab.clientId)
+		// Store the Schwab app approval in KV for future sessions (using stable SCHWAB_CLIENT_ID)
+		// This way, users only need to approve once regardless of mcp-remote session
+		await approveClient(config.OAUTH_KV, config.SCHWAB_CLIENT_ID)
+		oauthLogger.info('Schwab app approved for future sessions', {
+			schwabClientId: config.SCHWAB_CLIENT_ID.substring(0, 8) + '...',
+		})
 
 		return redirectToSchwab(c, config, authRequestForSchwab, headers)
 	} catch (error) {

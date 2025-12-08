@@ -7,8 +7,13 @@ import {
 	type EnhancedTokenManager,
 	type SchwabApiLogger,
 	type TokenData,
+	SchwabApiError,
+	SchwabAuthError,
+	isSchwabApiError,
+	isAuthError,
 } from '@sudowealth/schwab-api'
 import { DurableMCP } from 'workers-mcp'
+import { z } from 'zod'
 import { type ValidatedEnv } from '../types/env'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
 import { getConfig } from './config'
@@ -65,6 +70,234 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 					],
 				}),
 			)
+
+			// Register ALL tools immediately so they appear in tools/list
+			// The handlers will use this.client which is populated before tools are called
+			this.mcpLogger.debug('[MyMCP.init] Registering all tools immediately...')
+			allToolSpecs.forEach((spec: ToolSpec<any>) => {
+				this.server.tool(
+					spec.name,
+					spec.description,
+					spec.schema instanceof Object && 'shape' in spec.schema ? spec.schema.shape : {},
+					async (args: any) => {
+						// Ensure client is initialized before tool execution
+						if (!this.client) {
+							return {
+								content: [{ type: 'text' as const, text: 'Error: API client not initialized. Please try again.' }],
+								isError: true,
+							}
+						}
+						try {
+							const parsedInput = spec.schema.parse(args)
+							const data = await spec.call(this.client, parsedInput)
+
+							// Build response content - handle null/undefined data (e.g., 201 Created with no body)
+							const content: Array<{ type: 'text'; text: string }> = [
+								{ type: 'text' as const, text: `Successfully executed ${spec.name}` },
+							]
+
+							// Only add data content if there's actual data to show
+							if (data !== null && data !== undefined) {
+								content.push({ type: 'text' as const, text: JSON.stringify(data, null, 2) })
+							} else {
+								content.push({ type: 'text' as const, text: 'Operation completed successfully (no response body)' })
+							}
+
+							return { content }
+						} catch (error) {
+							const errorMessage = error instanceof Error ? error.message : String(error)
+							this.mcpLogger.error(`Tool ${spec.name} failed`, { error: errorMessage })
+
+							// Build actionable error response for AI agents
+							const errorContent: Array<{ type: 'text'; text: string }> = []
+
+							// Handle Zod validation errors with helpful guidance
+							if (error instanceof z.ZodError) {
+								const issues = error.issues.map(issue => {
+									const path = issue.path.join('.')
+									return `  - ${path}: ${issue.message}`
+								}).join('\n')
+
+								errorContent.push({
+									type: 'text' as const,
+									text: `VALIDATION ERROR for ${spec.name}\n\n` +
+										`The request parameters failed validation:\n${issues}\n\n` +
+										`TIP: Check the tool schema for required fields and their types. ` +
+										`Use the schema descriptions to understand which fields are required vs optional.`
+								})
+								return { content: errorContent, isError: true }
+							}
+
+							// Handle Schwab API errors with rich context
+							if (isSchwabApiError(error)) {
+								const apiError = error as SchwabApiError
+								const status = apiError.status
+								const code = apiError.code
+								const formattedDetails = apiError.getFormattedDetails?.() || ''
+								const debugContext = apiError.getDebugContext?.() || ''
+								const requestId = apiError.getRequestId?.()
+								const isRetryable = apiError.isRetryable?.() || false
+
+								let actionableGuidance = ''
+								switch (status) {
+									case 400:
+										actionableGuidance = 'INVALID REQUEST: Check that all required parameters are provided with correct types and formats. ' +
+											'For date parameters, use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ). ' +
+											'For order endpoints, ensure session, duration, orderType, orderStrategyType, and orderLegCollection are provided.'
+										break
+									case 401:
+										actionableGuidance = 'AUTHENTICATION REQUIRED: The access token has expired or is invalid. ' +
+											'Schwab tokens expire after 7 days. Re-authentication is required.'
+										break
+									case 403:
+										actionableGuidance = 'FORBIDDEN: You do not have permission for this operation. ' +
+											'This may indicate insufficient account permissions or attempting to access another user\'s data.'
+										break
+									case 404:
+										actionableGuidance = 'NOT FOUND: The requested resource does not exist. ' +
+											'Check that account numbers, order IDs, or transaction IDs are correct.'
+										break
+									case 429:
+										const retryDelay = apiError.getRetryDelayMs?.()
+										actionableGuidance = `RATE LIMITED: Too many requests. ` +
+											(retryDelay ? `Wait ${Math.ceil(retryDelay / 1000)} seconds before retrying.` : 'Wait before retrying.')
+										break
+									case 500:
+									case 502:
+									case 503:
+									case 504:
+										actionableGuidance = `SERVER ERROR (${status}): Schwab's servers are experiencing issues. ` +
+											(isRetryable ? 'This error is retryable - wait a moment and try again.' : 'Try again later.')
+										break
+									default:
+										actionableGuidance = 'Unexpected error occurred. Review the error details below.'
+								}
+
+								errorContent.push({
+									type: 'text' as const,
+									text: `API ERROR: ${spec.name} failed\n\n` +
+										`Status: ${status} (${code})\n` +
+										(formattedDetails ? `Details: ${formattedDetails}\n` : '') +
+										(debugContext ? `Debug: ${debugContext}\n` : '') +
+										(requestId ? `Request ID: ${requestId}\n` : '') +
+										`\n${actionableGuidance}`
+								})
+
+								// Include raw body for debugging if available and not too large
+								if (apiError.body && typeof apiError.body === 'object') {
+									const bodyStr = JSON.stringify(apiError.body, null, 2)
+									if (bodyStr.length < 1000) {
+										errorContent.push({
+											type: 'text' as const,
+											text: `Raw response:\n${bodyStr}`
+										})
+									}
+								}
+
+								// Special handling for token expiration
+								if (status === 401) {
+									this.mcpLogger.warn('Token appears expired, clearing server-side cache')
+									try {
+										const kvToken = makeKvTokenStore(this.validatedConfig.OAUTH_KV)
+										const tokenIds = {
+											schwabUserId: this.props.schwabUserId,
+											clientId: this.props.clientId,
+										}
+										await kvToken.clear(tokenIds)
+										this.mcpLogger.info('Server-side token cache cleared successfully')
+									} catch (clearError) {
+										this.mcpLogger.error('Failed to clear token cache', {
+											error: clearError instanceof Error ? clearError.message : String(clearError)
+										})
+									}
+
+									errorContent.push({
+										type: 'text' as const,
+										text: `\nTo re-authenticate:\n` +
+											`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
+											`2. Restart Claude Desktop\n` +
+											`3. The OAuth flow will automatically trigger`
+									})
+								}
+
+								return { content: errorContent, isError: true }
+							}
+
+							// Handle Schwab Auth errors
+							if (isAuthError(error)) {
+								const authError = error as SchwabAuthError
+								errorContent.push({
+									type: 'text' as const,
+									text: `AUTHENTICATION ERROR: ${spec.name} failed\n\n` +
+										`Code: ${authError.code}\n` +
+										`Message: ${authError.message}\n\n` +
+										`This typically means the authentication tokens need to be refreshed.\n` +
+										`To re-authenticate:\n` +
+										`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
+										`2. Restart Claude Desktop\n` +
+										`3. The OAuth flow will automatically trigger`
+								})
+								return { content: errorContent, isError: true }
+							}
+
+							// Fallback for other errors - still provide context
+							const isTokenExpired =
+								errorMessage.includes('Unauthorized') ||
+								errorMessage.includes('401') ||
+								(errorMessage.includes('token') && errorMessage.toLowerCase().includes('expired')) ||
+								errorMessage.includes('invalid_grant') ||
+								errorMessage.includes('refresh token')
+
+							if (isTokenExpired) {
+								this.mcpLogger.warn('Token appears expired, clearing server-side cache')
+								try {
+									const kvToken = makeKvTokenStore(this.validatedConfig.OAUTH_KV)
+									const tokenIds = {
+										schwabUserId: this.props.schwabUserId,
+										clientId: this.props.clientId,
+									}
+									await kvToken.clear(tokenIds)
+									this.mcpLogger.info('Server-side token cache cleared successfully')
+								} catch (clearError) {
+									this.mcpLogger.error('Failed to clear token cache', {
+										error: clearError instanceof Error ? clearError.message : String(clearError)
+									})
+								}
+
+								return {
+									content: [{
+										type: 'text' as const,
+										text: `AUTHENTICATION EXPIRED: ${spec.name} failed\n\n` +
+											`Schwab tokens are valid for 7 days.\n\n` +
+											`To re-authenticate:\n` +
+											`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
+											`2. Restart Claude Desktop\n` +
+											`3. The OAuth flow will automatically trigger\n\n` +
+											`Original error: ${errorMessage}`
+									}],
+									isError: true,
+								}
+							}
+
+							// Generic error with helpful context
+							return {
+								content: [{
+									type: 'text' as const,
+									text: `ERROR: ${spec.name} failed\n\n` +
+										`Message: ${errorMessage}\n\n` +
+										`If this error persists, check:\n` +
+										`- Are all required parameters provided?\n` +
+										`- Are parameter types correct (strings, numbers, dates)?\n` +
+										`- Is the Schwab API available?`
+								}],
+								isError: true,
+							}
+						}
+					},
+				)
+			})
+			this.mcpLogger.debug(`[MyMCP.init] Registered ${allToolSpecs.length} tools`)
+
 			this.validatedConfig = getConfig(this.env)
 			// Initialize logger with configured level
 			const logLevel = this.validatedConfig.LOG_LEVEL as PinoLogLevel
@@ -191,31 +424,8 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				auth: this.tokenManager,
 			})
 			this.mcpLogger.debug('[MyMCP.init] STEP 6: SchwabApiClient ready.')
-
-			// 4. Register tools (this.server.tool calls are synchronous)
-			this.mcpLogger.debug('[MyMCP.init] STEP 7A: Calling registerTools...')
-			allToolSpecs.forEach((spec: ToolSpec<any>) => {
-				createTool(this.client, this.server, {
-					name: spec.name,
-					description: spec.description,
-					schema: spec.schema,
-					handler: async (params, c) => {
-						try {
-							const data = await spec.call(c, params)
-							return toolSuccess({
-								data,
-								source: spec.name,
-								message: `Successfully executed ${spec.name}`,
-							})
-						} catch (error) {
-							return toolError(error, { source: spec.name })
-						}
-					},
-				})
-			})
-			this.mcpLogger.debug('[MyMCP.init] STEP 7B: registerTools completed.')
 			this.mcpLogger.debug(
-				'[MyMCP.init] STEP 8: MyMCP.init FINISHED SUCCESSFULLY',
+				'[MyMCP.init] STEP 7: MyMCP.init FINISHED SUCCESSFULLY',
 			)
 		} catch (error: any) {
 			this.mcpLogger.error(
@@ -335,4 +545,5 @@ export default new OAuthProvider({
 	defaultHandler: SchwabHandler as any, // Cast remains
 	authorizeEndpoint: API_ENDPOINTS.AUTHORIZE,
 	tokenEndpoint: API_ENDPOINTS.TOKEN,
+	clientRegistrationEndpoint: API_ENDPOINTS.REGISTER,
 })
