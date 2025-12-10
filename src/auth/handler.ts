@@ -36,11 +36,122 @@ const oauthLogger = logger.child(LOGGER_CONTEXTS.OAUTH_HANDLER)
 // No need to store config locally, we'll build it per request
 
 /**
+ * Check if existing Schwab tokens in KV are valid (not expired)
+ * Returns the tokens and schwabUserId if valid, null otherwise
+ */
+async function getValidSchwabTokens(
+	kv: any, // KVNamespace - using any to avoid type conflicts between workers-types versions
+	schwabClientId: string,
+): Promise<{ tokens: TokenData; schwabUserId: string } | null> {
+	const kvToken = makeKvTokenStore(kv)
+
+	// Try to load tokens from the stable SCHWAB_CLIENT_ID key
+	const tokens = await kvToken.load({ clientId: schwabClientId })
+
+	if (!tokens) {
+		oauthLogger.debug('No existing Schwab tokens found in KV')
+		return null
+	}
+
+	// Check if access token is expired (with 5 minute buffer for safety)
+	const now = Date.now()
+	const bufferMs = 5 * 60 * 1000 // 5 minutes
+	const isExpired = tokens.expiresAt < now + bufferMs
+
+	if (isExpired) {
+		oauthLogger.debug('Existing Schwab tokens are expired or expiring soon', {
+			expiresAt: new Date(tokens.expiresAt).toISOString(),
+			now: new Date(now).toISOString(),
+		})
+
+		// Check if we have a valid refresh token (Schwab refresh tokens last 7 days)
+		if (tokens.refreshToken) {
+			oauthLogger.debug(
+				'Have refresh token, will attempt refresh during first API call',
+			)
+			// Return the tokens anyway - the EnhancedTokenManager will handle refresh
+			// We need to find the schwabUserId by checking other keys
+			const schwabUserId = await findSchwabUserIdFromKV(kv, schwabClientId)
+			if (schwabUserId) {
+				return { tokens, schwabUserId }
+			}
+		}
+
+		return null
+	}
+
+	// Tokens are valid, find the schwabUserId
+	const schwabUserId = await findSchwabUserIdFromKV(kv, schwabClientId)
+	if (!schwabUserId) {
+		oauthLogger.warn('Valid tokens found but no schwabUserId - token may need re-auth')
+		return null
+	}
+
+	oauthLogger.debug('Found valid Schwab tokens in KV', {
+		expiresAt: new Date(tokens.expiresAt).toISOString(),
+		schwabUserId: schwabUserId.substring(0, 8) + '...',
+	})
+
+	return { tokens, schwabUserId }
+}
+
+/**
+ * Find the schwabUserId from KV by checking known token keys
+ * This is a workaround for the chicken-and-egg problem
+ */
+async function findSchwabUserIdFromKV(
+	kv: any, // KVNamespace - using any to avoid type conflicts between workers-types versions
+	schwabClientId: string,
+): Promise<string | null> {
+	try {
+		// List all keys that start with 'token:'
+		const list = await kv.list({ prefix: 'token:' })
+
+		for (const key of list.keys) {
+			// Skip the stable SCHWAB_CLIENT_ID key - we're looking for schwabUserId keys
+			if (key.name === `token:${schwabClientId}`) {
+				continue
+			}
+
+			// schwabUserId format is typically a UUID like 'd5be5ccf-8533-b8d6-40e7-20c6fcbb1b15'
+			const potentialUserId = key.name.replace('token:', '')
+
+			// Check if it looks like a UUID (schwabUserId format)
+			const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+			if (uuidRegex.test(potentialUserId)) {
+				// Verify this key has the same tokens as the stable key
+				const tokenData = await kv.get(key.name)
+				const stableTokenData = await kv.get(`token:${schwabClientId}`)
+
+				if (tokenData && stableTokenData) {
+					const parsed = JSON.parse(tokenData)
+					const stableParsed = JSON.parse(stableTokenData)
+
+					// If refresh tokens match, this is the right user
+					if (parsed.refreshToken === stableParsed.refreshToken) {
+						return potentialUserId
+					}
+				}
+			}
+		}
+
+		oauthLogger.debug('Could not find schwabUserId in KV')
+		return null
+	} catch (error) {
+		oauthLogger.error('Error finding schwabUserId from KV', { error: sanitizeError(error) })
+		return null
+	}
+}
+
+/**
  * GET /authorize - Entry point for OAuth authorization flow
  *
- * This endpoint checks if the client is already approved, and either:
- * 1. Redirects directly to Schwab if approved
- * 2. Shows the approval dialog
+ * This endpoint has three paths:
+ * 1. If valid Schwab tokens exist in KV, complete OAuth immediately (no user interaction)
+ * 2. If client is approved but tokens are missing/expired, redirect to Schwab
+ * 3. If client not approved, show approval dialog
+ *
+ * This prevents multiple simultaneous OAuth flows when multiple projects connect
  */
 app.get('/authorize', async (c) => {
 	try {
@@ -54,6 +165,38 @@ app.get('/authorize', async (c) => {
 			oauthLogger.error(errorInfo.message)
 			const jsonResponse = createJsonErrorResponse(error)
 			return c.json(jsonResponse, errorInfo.status as any)
+		}
+
+		// OPTIMIZATION: Check if we already have valid Schwab tokens in KV
+		// If so, we can complete the OAuth flow immediately without user interaction
+		// This prevents multiple browser windows opening when multiple projects connect
+		const existingTokens = await getValidSchwabTokens(
+			config.OAUTH_KV,
+			config.SCHWAB_CLIENT_ID,
+		)
+
+		if (existingTokens) {
+			oauthLogger.info(
+				'Found valid Schwab tokens in KV - completing OAuth without user interaction',
+				{
+					schwabUserId: existingTokens.schwabUserId.substring(0, 8) + '...',
+				},
+			)
+
+			// Complete the authorization flow immediately
+			const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
+				request: oauthReqInfo,
+				userId: existingTokens.schwabUserId,
+				metadata: { label: existingTokens.schwabUserId },
+				scope: oauthReqInfo.scope,
+				props: {
+					schwabUserId: existingTokens.schwabUserId,
+					clientId: clientId,
+				},
+			})
+
+			oauthLogger.info('OAuth flow completed immediately using existing tokens')
+			return Response.redirect(redirectTo)
 		}
 
 		// Check if the Schwab app has been approved before (using stable SCHWAB_CLIENT_ID, not random mcp-remote clientId)
