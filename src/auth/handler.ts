@@ -306,20 +306,28 @@ app.get('/callback', async (c) => {
 			return c.json(jsonResponse, errorInfo.status as any)
 		}
 
-		// Migrate token from clientId-based key to schwabUserId-based key
+		// Save token under multiple keys for reliable lookup:
+		// 1. schwabUserId key - for user-specific access
+		// 2. SCHWAB_CLIENT_ID key - for initial connection before schwabUserId is known
 		try {
 			const currentTokenData = await kvToken.load({
 				clientId: clientIdFromState,
 			})
 			if (currentTokenData) {
-				// Save under schwabUserId key
+				// Save under schwabUserId key (user-specific)
 				await kvToken.save({ schwabUserId: userIdFromSchwab }, currentTokenData)
-				oauthLogger.info('Token migrated to schwabUserId key', {
-					fromKeyPrefix: sanitizeKeyForLog(
-						kvToken.kvKey({ clientId: clientIdFromState }),
-					),
-					toKeyPrefix: sanitizeKeyForLog(
+
+				// ALSO save under stable SCHWAB_CLIENT_ID key (for reconnection lookup)
+				// This solves the chicken-and-egg problem: we need schwabUserId to find tokens,
+				// but we only get schwabUserId after auth. This key is always available.
+				await kvToken.save({ clientId: config.SCHWAB_CLIENT_ID }, currentTokenData)
+
+				oauthLogger.info('Token saved to multiple keys for reliable lookup', {
+					schwabUserIdKey: sanitizeKeyForLog(
 						kvToken.kvKey({ schwabUserId: userIdFromSchwab }),
+					),
+					stableClientIdKey: sanitizeKeyForLog(
+						kvToken.kvKey({ clientId: config.SCHWAB_CLIENT_ID }),
 					),
 				})
 			}

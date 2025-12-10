@@ -336,10 +336,19 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 			)
 
 			// Token save function uses KV store exclusively
+			// Saves under both schwabUserId (if available) AND stable SCHWAB_CLIENT_ID for reliable reconnection
 			const saveTokenForETM = async (tokenSet: TokenData) => {
-				await kvToken.save(getTokenIds(), tokenSet)
+				const tokenIds = getTokenIds()
+				await kvToken.save(tokenIds, tokenSet)
+
+				// Also save under stable SCHWAB_CLIENT_ID for reconnection lookup
+				// This ensures tokens can be found even before schwabUserId is known
+				const stableTokenIds = { clientId: this.validatedConfig.SCHWAB_CLIENT_ID }
+				await kvToken.save(stableTokenIds, tokenSet)
+
 				this.mcpLogger.debug('ETM: Token save to KV complete', {
-					keyPrefix: sanitizeKeyForLog(kvToken.kvKey(getTokenIds())),
+					primaryKey: sanitizeKeyForLog(kvToken.kvKey(tokenIds)),
+					stableKey: sanitizeKeyForLog(kvToken.kvKey(stableTokenIds)),
 				})
 			}
 
