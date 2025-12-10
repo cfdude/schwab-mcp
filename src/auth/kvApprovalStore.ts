@@ -1,8 +1,8 @@
-import { type KVNamespace } from '@cloudflare/workers-types'
-import { APPROVED_CLIENTS_KEY, TTL_1_YEAR } from '../shared/constants'
+// Using any for KVNamespace to avoid type conflicts between workers-types versions
+import { APPROVED_CLIENTS_KEY, TTL_1_YEAR, LOGGER_CONTEXTS } from '../shared/constants'
 import { logger } from '../shared/log'
 
-const approvalLogger = logger.child({ context: 'kv-approval-store' })
+const approvalLogger = logger.child(LOGGER_CONTEXTS.KV_APPROVAL_STORE)
 
 /**
  * KV-based approval store for approved client IDs.
@@ -10,7 +10,7 @@ const approvalLogger = logger.child({ context: 'kv-approval-store' })
  */
 
 export async function isClientApproved(
-	kv: KVNamespace,
+	kv: any, // KVNamespace
 	clientId: string,
 ): Promise<boolean> {
 	if (!clientId) return false
@@ -33,7 +33,7 @@ export async function isClientApproved(
 }
 
 export async function approveClient(
-	kv: KVNamespace,
+	kv: any, // KVNamespace
 	clientId: string,
 ): Promise<void> {
 	if (!clientId) return
@@ -64,7 +64,7 @@ export async function approveClient(
 	}
 }
 
-async function getApprovedClients(kv: KVNamespace): Promise<string[]> {
+async function getApprovedClients(kv: any): Promise<string[]> {
 	try {
 		const data = await kv.get(APPROVED_CLIENTS_KEY)
 		if (!data) return []
