@@ -195,8 +195,46 @@ app.get('/authorize', async (c) => {
 				},
 			})
 
-			oauthLogger.info('OAuth flow completed immediately using existing tokens')
-			return Response.redirect(redirectTo)
+			oauthLogger.info('OAuth flow completed immediately using existing tokens', {
+				redirectTo: redirectTo.substring(0, 50) + '...',
+			})
+
+			// Return an HTML page with delayed redirect instead of instant redirect
+			// This gives mcp-remote time to start its callback server
+			// The delay is 800ms which should be enough for the local server to be ready
+			const delayedRedirectHtml = `<!DOCTYPE html>
+<html>
+<head>
+	<title>Authorization Successful</title>
+	<meta http-equiv="refresh" content="1;url=${redirectTo}">
+	<style>
+		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
+		.container { text-align: center; padding: 2rem; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+		.spinner { width: 40px; height: 40px; border: 4px solid #e0e0e0; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+		@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+		h2 { color: #333; margin-bottom: 0.5rem; }
+		p { color: #666; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="spinner"></div>
+		<h2>Authorization Successful</h2>
+		<p>Connecting to Schwab MCP Server...</p>
+	</div>
+	<script>
+		// Fallback redirect after 1 second if meta refresh doesn't work
+		setTimeout(function() { window.location.href = "${redirectTo}"; }, 1000);
+	</script>
+</body>
+</html>`
+
+			return new Response(delayedRedirectHtml, {
+				status: 200,
+				headers: {
+					'Content-Type': 'text/html; charset=utf-8',
+				},
+			})
 		}
 
 		// Check if the Schwab app has been approved before (using stable SCHWAB_CLIENT_ID, not random mcp-remote clientId)
