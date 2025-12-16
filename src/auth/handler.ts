@@ -35,6 +35,154 @@ const oauthLogger = logger.child(LOGGER_CONTEXTS.OAUTH_HANDLER)
 
 // No need to store config locally, we'll build it per request
 
+// Constants for distributed auth lock
+const AUTH_LOCK_KEY = 'auth-lock'
+const AUTH_LOCK_TTL = 60 // 60 seconds max lock duration
+const AUTH_LOCK_WAIT_MS = 2000 // Wait 2 seconds between lock checks
+const AUTH_LOCK_MAX_RETRIES = 5 // Max retries waiting for lock
+
+/**
+ * Distributed lock for OAuth flows to prevent multiple simultaneous browser auth attempts.
+ * When multiple mcp-remote sessions detect they need auth, only one should open a browser.
+ */
+interface AuthLock {
+	sessionId: string
+	timestamp: number
+	expiresAt: number
+}
+
+/**
+ * Try to acquire the auth lock. Returns true if lock acquired, false if already held by another session.
+ */
+async function tryAcquireAuthLock(kv: any, sessionId: string): Promise<boolean> {
+	try {
+		const existing = await kv.get(AUTH_LOCK_KEY)
+		if (existing) {
+			const lock: AuthLock = JSON.parse(existing)
+			// Check if lock is expired
+			if (lock.expiresAt > Date.now()) {
+				// Lock is still valid and held by another session
+				oauthLogger.debug('Auth lock held by another session', {
+					holder: lock.sessionId.substring(0, 8) + '...',
+					expiresIn: Math.round((lock.expiresAt - Date.now()) / 1000) + 's',
+				})
+				return false
+			}
+			// Lock expired, we can take it
+			oauthLogger.debug('Auth lock expired, acquiring')
+		}
+
+		// Acquire the lock
+		const newLock: AuthLock = {
+			sessionId,
+			timestamp: Date.now(),
+			expiresAt: Date.now() + AUTH_LOCK_TTL * 1000,
+		}
+		await kv.put(AUTH_LOCK_KEY, JSON.stringify(newLock), {
+			expirationTtl: AUTH_LOCK_TTL,
+		})
+		oauthLogger.info('Auth lock acquired', { sessionId: sessionId.substring(0, 8) + '...' })
+		return true
+	} catch (error) {
+		oauthLogger.error('Error acquiring auth lock', { error })
+		// On error, proceed without lock (fail open)
+		return true
+	}
+}
+
+/**
+ * Release the auth lock if held by this session
+ */
+async function releaseAuthLock(kv: any, sessionId: string): Promise<void> {
+	try {
+		const existing = await kv.get(AUTH_LOCK_KEY)
+		if (existing) {
+			const lock: AuthLock = JSON.parse(existing)
+			if (lock.sessionId === sessionId) {
+				await kv.delete(AUTH_LOCK_KEY)
+				oauthLogger.debug('Auth lock released', { sessionId: sessionId.substring(0, 8) + '...' })
+			}
+		}
+	} catch (error) {
+		oauthLogger.error('Error releasing auth lock', { error })
+	}
+}
+
+/**
+ * Wait for auth lock to be released, checking periodically for valid tokens
+ */
+async function waitForAuthLockOrTokens(
+	kv: any,
+	schwabClientId: string,
+): Promise<{ tokens: TokenData; schwabUserId: string } | null> {
+	for (let i = 0; i < AUTH_LOCK_MAX_RETRIES; i++) {
+		// Wait a bit
+		await new Promise((resolve) => setTimeout(resolve, AUTH_LOCK_WAIT_MS))
+
+		// Check if valid tokens are now available (another session might have completed auth)
+		const tokens = await getValidSchwabTokens(kv, schwabClientId)
+		if (tokens) {
+			oauthLogger.info('Valid tokens found after waiting for lock', {
+				schwabUserId: tokens.schwabUserId.substring(0, 8) + '...',
+			})
+			return tokens
+		}
+
+		// Check if lock is released
+		const lockData = await kv.get(AUTH_LOCK_KEY)
+		if (!lockData) {
+			oauthLogger.debug('Auth lock released, but no tokens found yet')
+			// Lock released but no tokens - we can try to acquire and auth
+			return null
+		}
+	}
+
+	oauthLogger.warn('Timed out waiting for auth lock')
+	return null
+}
+
+/**
+ * Create an HTML response with a delayed redirect to give mcp-remote time to start its callback server
+ * Uses a 2-second delay for reliability across different machines/network conditions
+ */
+function createDelayedRedirectResponse(redirectTo: string): Response {
+	const delaySeconds = 2 // 2 seconds should be enough for mcp-remote to be ready
+
+	const delayedRedirectHtml = `<!DOCTYPE html>
+<html>
+<head>
+	<title>Authorization Successful</title>
+	<meta http-equiv="refresh" content="${delaySeconds};url=${redirectTo}">
+	<style>
+		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
+		.container { text-align: center; padding: 2rem; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+		.spinner { width: 40px; height: 40px; border: 4px solid #e0e0e0; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+		@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+		h2 { color: #333; margin-bottom: 0.5rem; }
+		p { color: #666; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="spinner"></div>
+		<h2>Authorization Successful</h2>
+		<p>Connecting to Schwab MCP Server...</p>
+	</div>
+	<script>
+		// Fallback redirect after delay if meta refresh doesn't work
+		setTimeout(function() { window.location.href = "${redirectTo}"; }, ${delaySeconds * 1000});
+	</script>
+</body>
+</html>`
+
+	return new Response(delayedRedirectHtml, {
+		status: 200,
+		headers: {
+			'Content-Type': 'text/html; charset=utf-8',
+		},
+	})
+}
+
 /**
  * Check if existing Schwab tokens in KV are valid (not expired)
  * Returns the tokens and schwabUserId if valid, null otherwise
@@ -199,42 +347,51 @@ app.get('/authorize', async (c) => {
 				redirectTo: redirectTo.substring(0, 50) + '...',
 			})
 
-			// Return an HTML page with delayed redirect instead of instant redirect
-			// This gives mcp-remote time to start its callback server
-			// The delay is 800ms which should be enough for the local server to be ready
-			const delayedRedirectHtml = `<!DOCTYPE html>
-<html>
-<head>
-	<title>Authorization Successful</title>
-	<meta http-equiv="refresh" content="1;url=${redirectTo}">
-	<style>
-		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
-		.container { text-align: center; padding: 2rem; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-		.spinner { width: 40px; height: 40px; border: 4px solid #e0e0e0; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
-		@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-		h2 { color: #333; margin-bottom: 0.5rem; }
-		p { color: #666; }
-	</style>
-</head>
-<body>
-	<div class="container">
-		<div class="spinner"></div>
-		<h2>Authorization Successful</h2>
-		<p>Connecting to Schwab MCP Server...</p>
-	</div>
-	<script>
-		// Fallback redirect after 1 second if meta refresh doesn't work
-		setTimeout(function() { window.location.href = "${redirectTo}"; }, 1000);
-	</script>
-</body>
-</html>`
+			// Return an HTML page with delayed redirect
+			return createDelayedRedirectResponse(redirectTo)
+		}
 
-			return new Response(delayedRedirectHtml, {
-				status: 200,
-				headers: {
-					'Content-Type': 'text/html; charset=utf-8',
-				},
+		// No valid tokens in KV - need to redirect to Schwab OAuth
+		// Use distributed lock to prevent multiple browser windows opening
+		const sessionId = clientId // Use mcp-remote's clientId as session identifier
+
+		// Try to acquire the auth lock
+		const lockAcquired = await tryAcquireAuthLock(config.OAUTH_KV, sessionId)
+
+		if (!lockAcquired) {
+			// Another session is currently doing auth - wait for it
+			oauthLogger.info('Another session is authenticating, waiting for result...', {
+				sessionId: sessionId.substring(0, 8) + '...',
 			})
+
+			const tokensAfterWait = await waitForAuthLockOrTokens(
+				config.OAUTH_KV,
+				config.SCHWAB_CLIENT_ID,
+			)
+
+			if (tokensAfterWait) {
+				// Another session completed auth - use their tokens
+				oauthLogger.info('Using tokens from another session\'s auth', {
+					schwabUserId: tokensAfterWait.schwabUserId.substring(0, 8) + '...',
+				})
+
+				const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
+					request: oauthReqInfo,
+					userId: tokensAfterWait.schwabUserId,
+					metadata: { label: tokensAfterWait.schwabUserId },
+					scope: oauthReqInfo.scope,
+					props: {
+						schwabUserId: tokensAfterWait.schwabUserId,
+						clientId: clientId,
+					},
+				})
+
+				// Use delayed redirect
+				return createDelayedRedirectResponse(redirectTo)
+			}
+
+			// Timed out waiting - try to acquire lock and proceed
+			oauthLogger.warn('Timed out waiting for other session, proceeding with auth')
 		}
 
 		// Check if the Schwab app has been approved before (using stable SCHWAB_CLIENT_ID, not random mcp-remote clientId)
@@ -536,6 +693,11 @@ app.get('/callback', async (c) => {
 				clientId: clientIdFromState,
 			},
 		})
+
+		// Release the auth lock now that tokens are saved
+		// This allows other waiting sessions to use the new tokens
+		await releaseAuthLock(config.OAUTH_KV, clientIdFromState)
+		oauthLogger.info('Auth callback completed, lock released')
 
 		return Response.redirect(redirectTo)
 	} catch (error) {
