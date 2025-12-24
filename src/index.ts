@@ -43,16 +43,75 @@ type MyMCPProps = {
 	clientId?: string
 }
 
+/** Idle timeout in milliseconds (5 minutes) */
+const SSE_IDLE_TIMEOUT_MS = 5 * 60 * 1000
+
 export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	private tokenManager!: EnhancedTokenManager
 	private client!: SchwabApiClient
 	private validatedConfig!: ValidatedEnv
 	private mcpLogger = logger.child(LOGGER_CONTEXTS.MCP_DO)
+	private lastActivityTimestamp: number = Date.now()
+	/** Our own reference to the SSE transport for idle timeout management */
+	private sseTransport: { close: () => Promise<void> } | null = null
 
 	server = new McpServer({
 		name: APP_NAME,
 		version: '0.0.1',
 	})
+
+	/**
+	 * Update last activity timestamp and schedule idle timeout alarm.
+	 * Called on SSE connect and every tool call.
+	 */
+	private async updateActivity(): Promise<void> {
+		this.lastActivityTimestamp = Date.now()
+		const alarmTime = this.lastActivityTimestamp + SSE_IDLE_TIMEOUT_MS
+		try {
+			await this.ctx.storage.setAlarm(alarmTime)
+			this.mcpLogger.debug('Idle timeout alarm scheduled', {
+				alarmIn: `${SSE_IDLE_TIMEOUT_MS / 1000}s`,
+			})
+		} catch (error) {
+			this.mcpLogger.warn('Failed to set idle timeout alarm', {
+				error: error instanceof Error ? error.message : String(error),
+			})
+		}
+	}
+
+	/**
+	 * Durable Object alarm handler - closes SSE connection if idle.
+	 * Called by Cloudflare when the scheduled alarm fires.
+	 */
+	async alarm(): Promise<void> {
+		const now = Date.now()
+		const idleTime = now - this.lastActivityTimestamp
+		const isIdle = idleTime >= SSE_IDLE_TIMEOUT_MS
+
+		this.mcpLogger.info('Idle timeout alarm fired', {
+			idleTimeSeconds: Math.floor(idleTime / 1000),
+			isIdle,
+		})
+
+		if (isIdle && this.sseTransport) {
+			this.mcpLogger.info(
+				'Closing idle SSE connection to save DO compute costs',
+			)
+			try {
+				await this.sseTransport.close()
+				this.sseTransport = null
+				this.mcpLogger.info('SSE connection closed successfully')
+			} catch (error) {
+				this.mcpLogger.warn('Error closing SSE connection', {
+					error: error instanceof Error ? error.message : String(error),
+				})
+			}
+		} else if (!isIdle) {
+			// Activity occurred since alarm was set, reschedule
+			this.mcpLogger.debug('Connection still active, rescheduling alarm')
+			await this.updateActivity()
+		}
+	}
 
 	async init() {
 		try {
@@ -82,6 +141,9 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 						? spec.schema.shape
 						: {},
 					async (args: any) => {
+						// Update activity timestamp to reset idle timeout
+						await this.updateActivity()
+
 						// Ensure client is initialized before tool execution
 						if (!this.client) {
 							return {
@@ -610,8 +672,14 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 	async onSSE(event: any) {
 		this.mcpLogger.info('SSE connection established or reconnected')
+		// Start idle timeout tracking
+		await this.updateActivity()
 		await this.onReconnect()
-		return await super.onSSE(event)
+		const response = await super.onSSE(event)
+		// Capture transport reference for idle timeout management
+		// Access via 'any' since parent's transport is private
+		this.sseTransport = (this as any).transport
+		return response
 	}
 }
 
