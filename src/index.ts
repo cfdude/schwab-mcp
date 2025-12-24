@@ -7,14 +7,15 @@ import {
 	type EnhancedTokenManager,
 	type SchwabApiLogger,
 	type TokenData,
-	SchwabApiError,
-	SchwabAuthError,
+	type SchwabApiError,
+	type SchwabAuthError,
 	isSchwabApiError,
 	isAuthError,
 } from '@sudowealth/schwab-api'
 import { DurableMCP } from 'workers-mcp'
 import { z } from 'zod'
-import { type ValidatedEnv } from '../types/env'
+import { type ValidatedEnv, type Env } from '../types/env'
+import { ApiHandler } from './api/handler'
 import { SchwabHandler, initializeSchwabAuthClient } from './auth'
 import { getConfig } from './config'
 import {
@@ -29,7 +30,6 @@ import {
 import { makeKvTokenStore, type TokenIdentifiers } from './shared/kvTokenStore'
 import { logger, buildLogger, type PinoLogLevel } from './shared/log'
 import { logOnlyInDevelopment } from './shared/secureLogger'
-import { createTool, toolError, toolSuccess } from './shared/toolBuilder'
 import { allToolSpecs, type ToolSpec } from './tools'
 
 /**
@@ -78,12 +78,19 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 				this.server.tool(
 					spec.name,
 					spec.description,
-					spec.schema instanceof Object && 'shape' in spec.schema ? spec.schema.shape : {},
+					spec.schema instanceof Object && 'shape' in spec.schema
+						? spec.schema.shape
+						: {},
 					async (args: any) => {
 						// Ensure client is initialized before tool execution
 						if (!this.client) {
 							return {
-								content: [{ type: 'text' as const, text: 'Error: API client not initialized. Please try again.' }],
+								content: [
+									{
+										type: 'text' as const,
+										text: 'Error: API client not initialized. Please try again.',
+									},
+								],
 								isError: true,
 							}
 						}
@@ -93,37 +100,52 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 							// Build response content - handle null/undefined data (e.g., 201 Created with no body)
 							const content: Array<{ type: 'text'; text: string }> = [
-								{ type: 'text' as const, text: `Successfully executed ${spec.name}` },
+								{
+									type: 'text' as const,
+									text: `Successfully executed ${spec.name}`,
+								},
 							]
 
 							// Only add data content if there's actual data to show
 							if (data !== null && data !== undefined) {
-								content.push({ type: 'text' as const, text: JSON.stringify(data, null, 2) })
+								content.push({
+									type: 'text' as const,
+									text: JSON.stringify(data, null, 2),
+								})
 							} else {
-								content.push({ type: 'text' as const, text: 'Operation completed successfully (no response body)' })
+								content.push({
+									type: 'text' as const,
+									text: 'Operation completed successfully (no response body)',
+								})
 							}
 
 							return { content }
 						} catch (error) {
-							const errorMessage = error instanceof Error ? error.message : String(error)
-							this.mcpLogger.error(`Tool ${spec.name} failed`, { error: errorMessage })
+							const errorMessage =
+								error instanceof Error ? error.message : String(error)
+							this.mcpLogger.error(`Tool ${spec.name} failed`, {
+								error: errorMessage,
+							})
 
 							// Build actionable error response for AI agents
 							const errorContent: Array<{ type: 'text'; text: string }> = []
 
 							// Handle Zod validation errors with helpful guidance
 							if (error instanceof z.ZodError) {
-								const issues = error.issues.map(issue => {
-									const path = issue.path.join('.')
-									return `  - ${path}: ${issue.message}`
-								}).join('\n')
+								const issues = error.issues
+									.map((issue) => {
+										const path = issue.path.join('.')
+										return `  - ${path}: ${issue.message}`
+									})
+									.join('\n')
 
 								errorContent.push({
 									type: 'text' as const,
-									text: `VALIDATION ERROR for ${spec.name}\n\n` +
+									text:
+										`VALIDATION ERROR for ${spec.name}\n\n` +
 										`The request parameters failed validation:\n${issues}\n\n` +
 										`TIP: Check the tool schema for required fields and their types. ` +
-										`Use the schema descriptions to understand which fields are required vs optional.`
+										`Use the schema descriptions to understand which fields are required vs optional.`,
 								})
 								return { content: errorContent, isError: true }
 							}
@@ -141,46 +163,58 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 								let actionableGuidance = ''
 								switch (status) {
 									case 400:
-										actionableGuidance = 'INVALID REQUEST: Check that all required parameters are provided with correct types and formats. ' +
+										actionableGuidance =
+											'INVALID REQUEST: Check that all required parameters are provided with correct types and formats. ' +
 											'For date parameters, use ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ). ' +
 											'For order endpoints, ensure session, duration, orderType, orderStrategyType, and orderLegCollection are provided.'
 										break
 									case 401:
-										actionableGuidance = 'AUTHENTICATION REQUIRED: The access token has expired or is invalid. ' +
+										actionableGuidance =
+											'AUTHENTICATION REQUIRED: The access token has expired or is invalid. ' +
 											'Schwab tokens expire after 7 days. Re-authentication is required.'
 										break
 									case 403:
-										actionableGuidance = 'FORBIDDEN: You do not have permission for this operation. ' +
-											'This may indicate insufficient account permissions or attempting to access another user\'s data.'
+										actionableGuidance =
+											'FORBIDDEN: You do not have permission for this operation. ' +
+											"This may indicate insufficient account permissions or attempting to access another user's data."
 										break
 									case 404:
-										actionableGuidance = 'NOT FOUND: The requested resource does not exist. ' +
+										actionableGuidance =
+											'NOT FOUND: The requested resource does not exist. ' +
 											'Check that account numbers, order IDs, or transaction IDs are correct.'
 										break
 									case 429:
 										const retryDelay = apiError.getRetryDelayMs?.()
-										actionableGuidance = `RATE LIMITED: Too many requests. ` +
-											(retryDelay ? `Wait ${Math.ceil(retryDelay / 1000)} seconds before retrying.` : 'Wait before retrying.')
+										actionableGuidance =
+											`RATE LIMITED: Too many requests. ` +
+											(retryDelay
+												? `Wait ${Math.ceil(retryDelay / 1000)} seconds before retrying.`
+												: 'Wait before retrying.')
 										break
 									case 500:
 									case 502:
 									case 503:
 									case 504:
-										actionableGuidance = `SERVER ERROR (${status}): Schwab's servers are experiencing issues. ` +
-											(isRetryable ? 'This error is retryable - wait a moment and try again.' : 'Try again later.')
+										actionableGuidance =
+											`SERVER ERROR (${status}): Schwab's servers are experiencing issues. ` +
+											(isRetryable
+												? 'This error is retryable - wait a moment and try again.'
+												: 'Try again later.')
 										break
 									default:
-										actionableGuidance = 'Unexpected error occurred. Review the error details below.'
+										actionableGuidance =
+											'Unexpected error occurred. Review the error details below.'
 								}
 
 								errorContent.push({
 									type: 'text' as const,
-									text: `API ERROR: ${spec.name} failed\n\n` +
+									text:
+										`API ERROR: ${spec.name} failed\n\n` +
 										`Status: ${status} (${code})\n` +
 										(formattedDetails ? `Details: ${formattedDetails}\n` : '') +
 										(debugContext ? `Debug: ${debugContext}\n` : '') +
 										(requestId ? `Request ID: ${requestId}\n` : '') +
-										`\n${actionableGuidance}`
+										`\n${actionableGuidance}`,
 								})
 
 								// Include raw body for debugging if available and not too large
@@ -189,34 +223,44 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 									if (bodyStr.length < 1000) {
 										errorContent.push({
 											type: 'text' as const,
-											text: `Raw response:\n${bodyStr}`
+											text: `Raw response:\n${bodyStr}`,
 										})
 									}
 								}
 
 								// Special handling for token expiration
 								if (status === 401) {
-									this.mcpLogger.warn('Token appears expired, clearing server-side cache')
+									this.mcpLogger.warn(
+										'Token appears expired, clearing server-side cache',
+									)
 									try {
-										const kvToken = makeKvTokenStore(this.validatedConfig.OAUTH_KV)
+										const kvToken = makeKvTokenStore(
+											this.validatedConfig.OAUTH_KV,
+										)
 										const tokenIds = {
 											schwabUserId: this.props.schwabUserId,
 											clientId: this.props.clientId,
 										}
 										await kvToken.clear(tokenIds)
-										this.mcpLogger.info('Server-side token cache cleared successfully')
+										this.mcpLogger.info(
+											'Server-side token cache cleared successfully',
+										)
 									} catch (clearError) {
 										this.mcpLogger.error('Failed to clear token cache', {
-											error: clearError instanceof Error ? clearError.message : String(clearError)
+											error:
+												clearError instanceof Error
+													? clearError.message
+													: String(clearError),
 										})
 									}
 
 									errorContent.push({
 										type: 'text' as const,
-										text: `\nTo re-authenticate:\n` +
+										text:
+											`\nTo re-authenticate:\n` +
 											`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
 											`2. Restart Claude Desktop\n` +
-											`3. The OAuth flow will automatically trigger`
+											`3. The OAuth flow will automatically trigger`,
 									})
 								}
 
@@ -228,14 +272,15 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 								const authError = error as SchwabAuthError
 								errorContent.push({
 									type: 'text' as const,
-									text: `AUTHENTICATION ERROR: ${spec.name} failed\n\n` +
+									text:
+										`AUTHENTICATION ERROR: ${spec.name} failed\n\n` +
 										`Code: ${authError.code}\n` +
 										`Message: ${authError.message}\n\n` +
 										`This typically means the authentication tokens need to be refreshed.\n` +
 										`To re-authenticate:\n` +
 										`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
 										`2. Restart Claude Desktop\n` +
-										`3. The OAuth flow will automatically trigger`
+										`3. The OAuth flow will automatically trigger`,
 								})
 								return { content: errorContent, isError: true }
 							}
@@ -244,59 +289,77 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 							const isTokenExpired =
 								errorMessage.includes('Unauthorized') ||
 								errorMessage.includes('401') ||
-								(errorMessage.includes('token') && errorMessage.toLowerCase().includes('expired')) ||
+								(errorMessage.includes('token') &&
+									errorMessage.toLowerCase().includes('expired')) ||
 								errorMessage.includes('invalid_grant') ||
 								errorMessage.includes('refresh token')
 
 							if (isTokenExpired) {
-								this.mcpLogger.warn('Token appears expired, clearing server-side cache')
+								this.mcpLogger.warn(
+									'Token appears expired, clearing server-side cache',
+								)
 								try {
-									const kvToken = makeKvTokenStore(this.validatedConfig.OAUTH_KV)
+									const kvToken = makeKvTokenStore(
+										this.validatedConfig.OAUTH_KV,
+									)
 									const tokenIds = {
 										schwabUserId: this.props.schwabUserId,
 										clientId: this.props.clientId,
 									}
 									await kvToken.clear(tokenIds)
-									this.mcpLogger.info('Server-side token cache cleared successfully')
+									this.mcpLogger.info(
+										'Server-side token cache cleared successfully',
+									)
 								} catch (clearError) {
 									this.mcpLogger.error('Failed to clear token cache', {
-										error: clearError instanceof Error ? clearError.message : String(clearError)
+										error:
+											clearError instanceof Error
+												? clearError.message
+												: String(clearError),
 									})
 								}
 
 								return {
-									content: [{
-										type: 'text' as const,
-										text: `AUTHENTICATION EXPIRED: ${spec.name} failed\n\n` +
-											`Schwab tokens are valid for 7 days.\n\n` +
-											`To re-authenticate:\n` +
-											`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
-											`2. Restart Claude Desktop\n` +
-											`3. The OAuth flow will automatically trigger\n\n` +
-											`Original error: ${errorMessage}`
-									}],
+									content: [
+										{
+											type: 'text' as const,
+											text:
+												`AUTHENTICATION EXPIRED: ${spec.name} failed\n\n` +
+												`Schwab tokens are valid for 7 days.\n\n` +
+												`To re-authenticate:\n` +
+												`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
+												`2. Restart Claude Desktop\n` +
+												`3. The OAuth flow will automatically trigger\n\n` +
+												`Original error: ${errorMessage}`,
+										},
+									],
 									isError: true,
 								}
 							}
 
 							// Generic error with helpful context
 							return {
-								content: [{
-									type: 'text' as const,
-									text: `ERROR: ${spec.name} failed\n\n` +
-										`Message: ${errorMessage}\n\n` +
-										`If this error persists, check:\n` +
-										`- Are all required parameters provided?\n` +
-										`- Are parameter types correct (strings, numbers, dates)?\n` +
-										`- Is the Schwab API available?`
-								}],
+								content: [
+									{
+										type: 'text' as const,
+										text:
+											`ERROR: ${spec.name} failed\n\n` +
+											`Message: ${errorMessage}\n\n` +
+											`If this error persists, check:\n` +
+											`- Are all required parameters provided?\n` +
+											`- Are parameter types correct (strings, numbers, dates)?\n` +
+											`- Is the Schwab API available?`,
+									},
+								],
 								isError: true,
 							}
 						}
 					},
 				)
 			})
-			this.mcpLogger.debug(`[MyMCP.init] Registered ${allToolSpecs.length} tools`)
+			this.mcpLogger.debug(
+				`[MyMCP.init] Registered ${allToolSpecs.length} tools`,
+			)
 
 			this.validatedConfig = getConfig(this.env)
 			// Initialize logger with configured level
@@ -320,7 +383,9 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 			const getTokenIds = (): TokenIdentifiers => ({
 				schwabUserId: this.props.schwabUserId,
-				clientId: this.props.clientId,
+				// Always use stable SCHWAB_CLIENT_ID for token lookup, not mcp-remote's clientId
+				// mcp-remote creates a new clientId each session, but SCHWAB_CLIENT_ID is constant
+				clientId: this.validatedConfig.SCHWAB_CLIENT_ID,
 			})
 
 			// Debug token IDs during initialization
@@ -343,7 +408,9 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 				// Also save under stable SCHWAB_CLIENT_ID for reconnection lookup
 				// This ensures tokens can be found even before schwabUserId is known
-				const stableTokenIds = { clientId: this.validatedConfig.SCHWAB_CLIENT_ID }
+				const stableTokenIds = {
+					clientId: this.validatedConfig.SCHWAB_CLIENT_ID,
+				}
 				await kvToken.save(stableTokenIds, tokenSet)
 
 				this.mcpLogger.debug('ETM: Token save to KV complete', {
@@ -548,7 +615,8 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	}
 }
 
-export default new OAuthProvider({
+// Create the OAuth provider for MCP protocol
+const oauthProvider = new OAuthProvider({
 	apiRoute: API_ENDPOINTS.SSE,
 	apiHandler: MyMCP.mount(API_ENDPOINTS.SSE) as any, // Cast remains due to library typing
 	defaultHandler: SchwabHandler as any, // Cast remains
@@ -556,3 +624,22 @@ export default new OAuthProvider({
 	tokenEndpoint: API_ENDPOINTS.TOKEN,
 	clientRegistrationEndpoint: API_ENDPOINTS.REGISTER,
 })
+
+// Export a wrapper that routes /api/* to ApiHandler, everything else to OAuthProvider
+export default {
+	async fetch(
+		request: Request,
+		env: Env,
+		ctx: ExecutionContext,
+	): Promise<Response> {
+		const url = new URL(request.url)
+
+		// Route /api/* requests to the direct API handler (bypasses MCP OAuth)
+		if (url.pathname.startsWith('/api')) {
+			return ApiHandler.fetch(request, env, ctx)
+		}
+
+		// All other requests go through OAuthProvider
+		return oauthProvider.fetch(request, env, ctx)
+	},
+}

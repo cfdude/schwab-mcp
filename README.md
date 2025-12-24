@@ -213,6 +213,112 @@ Once connected, you can ask Claude to:
 - "Show me the options chain for TSLA"
 - "Get my recent transactions from the last week"
 
+### Direct REST API Access (Python/Scripts)
+
+For external scripts that need to access Schwab data without a live Claude
+session (e.g., Python trading scripts, cron jobs), the server provides a REST
+API that bypasses MCP OAuth using API key authentication.
+
+#### Setup
+
+1. **Generate and set an API key** (at least 32 characters):
+
+```bash
+# Generate a secure key
+openssl rand -base64 48
+
+# Set it as a Cloudflare secret
+echo 'your-generated-key' | npx wrangler secret put API_SECRET_KEY
+```
+
+2. **First-time authentication**: You must authenticate via Claude Code or
+   Claude Desktop at least once to establish Schwab OAuth tokens. The tokens are
+   stored in Cloudflare KV and will be used by the REST API.
+
+3. **Store your API key** in your application's `.env` file:
+
+```env
+SCHWAB_API_KEY=your-generated-key
+SCHWAB_API_URL=https://schwab-mcp.<your-subdomain>.workers.dev
+```
+
+#### Available Endpoints
+
+All endpoints require the `Authorization: Bearer <API_KEY>` header.
+
+| Endpoint                        | Method | Description                           |
+| ------------------------------- | ------ | ------------------------------------- |
+| `/api/status`                   | GET    | Check token status and expiration     |
+| `/api/accounts`                 | GET    | Get all accounts with positions       |
+| `/api/accounts/:id`             | GET    | Get specific account                  |
+| `/api/quotes?symbols=AAPL,MSFT` | GET    | Get quotes for multiple symbols       |
+| `/api/quotes/:symbol`           | GET    | Get quote for single symbol           |
+| `/api/orders`                   | GET    | Get orders (optional: `?account=...`) |
+| `/api/transactions?account=...` | GET    | Get transactions for account          |
+| `/api/pricehistory/:symbol`     | GET    | Get price history                     |
+
+#### Python Example
+
+```python
+import os
+import requests
+
+API_KEY = os.getenv("SCHWAB_API_KEY")
+API_URL = os.getenv("SCHWAB_API_URL")
+
+headers = {"Authorization": f"Bearer {API_KEY}"}
+
+# Check token status
+status = requests.get(f"{API_URL}/api/status", headers=headers).json()
+print(f"Token status: {status['status']}")
+
+# Get accounts with positions
+accounts = requests.get(f"{API_URL}/api/accounts", headers=headers).json()
+for account in accounts:
+    print(f"Account: {account['securitiesAccount']['accountNumber']}")
+
+# Get real-time quotes
+quotes = requests.get(
+    f"{API_URL}/api/quotes",
+    params={"symbols": "AAPL,MSFT,GOOGL"},
+    headers=headers
+).json()
+
+# Get price history
+history = requests.get(
+    f"{API_URL}/api/pricehistory/AAPL",
+    params={"periodType": "month", "period": 1, "frequencyType": "daily"},
+    headers=headers
+).json()
+```
+
+#### Security Notes
+
+- API keys are validated using timing-safe comparison to prevent timing attacks
+- All requests are logged with IP address for monitoring
+- Generic 401 responses prevent information leakage about key validity
+- HTTPS is enforced by Cloudflare
+- Schwab tokens are stored encrypted in Cloudflare KV, not exposed via API
+
+#### Token Refresh
+
+The REST API will automatically refresh Schwab tokens when they expire (if a
+valid refresh token exists). Schwab refresh tokens expire after 7 days, so you
+may need to re-authenticate via Claude periodically.
+
+Check `/api/status` to monitor token expiration:
+
+```json
+{
+	"status": "valid",
+	"authenticated": true,
+	"expiresAt": "2025-12-24T20:28:57.583Z",
+	"expiresInSeconds": 86400,
+	"hasRefreshToken": true,
+	"message": "Tokens valid for 1440 minutes"
+}
+```
+
 ### Local Development
 
 For local development, create a `.dev.vars` file (automatically ignored by git):
@@ -317,18 +423,15 @@ MIT
 ### Common Issues
 
 1. **"KV namespace not found" error**
-
    - Ensure you created the KV namespace and updated `wrangler.jsonc`
    - Run `npx wrangler kv:namespace list` to verify
 
 2. **Authentication failures**
-
    - Verify your redirect URI matches exactly in Schwab app settings
    - Check that all secrets are set correctly with `npx wrangler secret list`
    - Enable debug logging to see detailed OAuth flow
 
 3. **"Durable Objects not available" error**
-
    - Ensure you have a paid Cloudflare Workers plan
    - Durable Objects are not available on the free tier
 
