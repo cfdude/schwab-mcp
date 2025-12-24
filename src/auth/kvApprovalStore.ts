@@ -1,5 +1,9 @@
 // Using any for KVNamespace to avoid type conflicts between workers-types versions
-import { APPROVED_CLIENTS_KEY, TTL_1_YEAR, LOGGER_CONTEXTS } from '../shared/constants'
+import {
+	APPROVED_CLIENTS_KEY,
+	TTL_1_YEAR,
+	LOGGER_CONTEXTS,
+} from '../shared/constants'
 import { logger } from '../shared/log'
 
 const approvalLogger = logger.child(LOGGER_CONTEXTS.KV_APPROVAL_STORE)

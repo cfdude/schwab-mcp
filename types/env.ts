@@ -47,6 +47,12 @@ export interface Env {
 	 * Optional comma-separated list of additional redirect URI regex patterns
 	 */
 	ALLOWED_REDIRECT_REGEXPS?: string
+
+	/**
+	 * Secret API key for direct REST API access (bypasses MCP OAuth)
+	 * Used by Python scripts and external integrations
+	 */
+	API_SECRET_KEY?: string
 }
 
 /**
@@ -95,4 +101,10 @@ export interface ValidatedEnv {
 	 * Optional comma-separated list of additional redirect URI regex patterns
 	 */
 	readonly ALLOWED_REDIRECT_REGEXPS?: string
+
+	/**
+	 * Secret API key for direct REST API access (bypasses MCP OAuth)
+	 * Used by Python scripts and external integrations
+	 */
+	readonly API_SECRET_KEY?: string
 }
