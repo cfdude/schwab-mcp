@@ -199,6 +199,13 @@ main() {
     esac
 
     log "INFO" "Keep-alive check completed successfully"
+
+    # Also sync MCP OAuth tokens to ensure Claude Code can connect
+    local mcp_sync_script="$(dirname "$0")/mcp-token-sync.sh"
+    if [[ -x "$mcp_sync_script" ]]; then
+        log "INFO" "Running MCP token sync..."
+        "$mcp_sync_script" >> "$LOG_FILE" 2>&1 || log "WARN" "MCP token sync failed"
+    fi
 }
 
 # Run main function
