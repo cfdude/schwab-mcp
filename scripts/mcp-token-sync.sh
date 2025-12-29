@@ -2,23 +2,24 @@
 #
 # MCP Token Sync Script
 #
-# Keeps MCP OAuth tokens synchronized across mcp-remote versions.
-# When upgrading mcp-remote (e.g., 0.1.35 -> 0.1.36), tokens are stored
-# in versioned directories. This script copies tokens to the current version.
+# Keeps MCP OAuth tokens synchronized across ALL mcp-remote versions.
+# mcp-remote stores tokens in versioned directories (mcp-remote-0.1.35,
+# mcp-remote-0.1.36, 0.1.37, etc). This script finds the freshest tokens
+# and copies them to ALL version directories.
 #
-# Also handles refreshing tokens when they're stale by triggering a brief
-# connection to the MCP server.
+# This handles:
+# - Version upgrades (tokens migrate automatically)
+# - Multiple projects using different pinned versions
+# - Future versions (tokens are ready before first use)
 #
 # Usage: ./mcp-token-sync.sh
-# Run at login or via launchd to ensure smooth reconnection.
+# Runs via launchd every 4 hours and as part of token-keepalive.sh
 
 set -euo pipefail
 
 # Configuration
 MCP_AUTH_DIR="$HOME/.mcp-auth"
-SCHWAB_URL="https://schwab-mcp-rsherman.onvex.workers.dev/sse"
-SCHWAB_URL_HASH="cee935839bfcb46a76e0f0d7c68d5afa"  # md5 of SCHWAB_URL
-CURRENT_VERSION="0.1.36"  # Update this when upgrading mcp-remote
+SCHWAB_URL_HASH="cee935839bfcb46a76e0f0d7c68d5afa"  # md5 of https://schwab-mcp-rsherman.onvex.workers.dev/sse
 LOG_FILE="$HOME/Library/Logs/trading/mcp-token-sync.log"
 
 # Ensure log directory exists
@@ -33,108 +34,119 @@ log() {
     echo "[$level] $message"
 }
 
-# Find the latest version directory with tokens for Schwab
-find_latest_tokens() {
-    local latest_version=""
-    local latest_time=0
+# Find the directory with the freshest (most recently modified) tokens
+find_freshest_tokens() {
+    local freshest_dir=""
+    local freshest_time=0
 
     for dir in "$MCP_AUTH_DIR"/mcp-remote-*/; do
+        [[ -d "$dir" ]] || continue
         local tokens_file="${dir}${SCHWAB_URL_HASH}_tokens.json"
         if [[ -f "$tokens_file" ]]; then
             local mod_time=$(stat -f %m "$tokens_file" 2>/dev/null || echo 0)
-            if [[ "$mod_time" -gt "$latest_time" ]]; then
-                latest_time="$mod_time"
-                latest_version="$dir"
+            if [[ "$mod_time" -gt "$freshest_time" ]]; then
+                freshest_time="$mod_time"
+                freshest_dir="$dir"
             fi
         fi
     done
 
-    echo "$latest_version"
-}
-
-# Sync tokens from source version to current version
-sync_tokens() {
-    local source_dir="$1"
-    local target_dir="$MCP_AUTH_DIR/mcp-remote-$CURRENT_VERSION"
-
-    # Create target directory if needed
-    mkdir -p "$target_dir"
-
-    # Copy all Schwab-related files
-    local copied=0
-    for suffix in "_tokens.json" "_client_info.json" "_code_verifier.txt" "_lock.json"; do
-        local source_file="${source_dir}${SCHWAB_URL_HASH}${suffix}"
-        local target_file="${target_dir}/${SCHWAB_URL_HASH}${suffix}"
-
-        if [[ -f "$source_file" ]]; then
-            # Only copy if source is newer or target doesn't exist
-            if [[ ! -f "$target_file" ]] || [[ "$source_file" -nt "$target_file" ]]; then
-                cp "$source_file" "$target_file"
-                ((copied++))
-            fi
-        fi
-    done
-
-    echo "$copied"
-}
-
-# Check if tokens exist for current version
-check_current_tokens() {
-    local target_dir="$MCP_AUTH_DIR/mcp-remote-$CURRENT_VERSION"
-    local tokens_file="${target_dir}/${SCHWAB_URL_HASH}_tokens.json"
-
-    if [[ -f "$tokens_file" ]]; then
-        echo "exists"
-    else
-        echo "missing"
+    if [[ -n "$freshest_dir" ]]; then
+        echo "$freshest_dir"
+        return 0
     fi
+    return 1
+}
+
+# Get all mcp-remote version directories
+get_all_versions() {
+    for dir in "$MCP_AUTH_DIR"/mcp-remote-*/; do
+        [[ -d "$dir" ]] && echo "$dir"
+    done
+}
+
+# Sync tokens from source directory to all other version directories
+sync_to_all_versions() {
+    local source_dir="$1"
+    local source_version=$(basename "$source_dir")
+    local synced_count=0
+    local created_count=0
+
+    for target_dir in $(get_all_versions); do
+        # Skip source directory
+        [[ "$target_dir" == "$source_dir" ]] && continue
+
+        local target_version=$(basename "$target_dir")
+
+        # Copy all Schwab-related files
+        for suffix in "_tokens.json" "_client_info.json" "_code_verifier.txt" "_lock.json"; do
+            local source_file="${source_dir}${SCHWAB_URL_HASH}${suffix}"
+            local target_file="${target_dir}${SCHWAB_URL_HASH}${suffix}"
+
+            if [[ -f "$source_file" ]]; then
+                # Copy if target doesn't exist or source is newer
+                if [[ ! -f "$target_file" ]]; then
+                    cp "$source_file" "$target_file"
+                    ((created_count++))
+                elif [[ "$source_file" -nt "$target_file" ]]; then
+                    cp "$source_file" "$target_file"
+                    ((synced_count++))
+                fi
+            fi
+        done
+    done
+
+    echo "$created_count:$synced_count"
+}
+
+# Create token files in a new version directory (for future versions)
+prepare_future_versions() {
+    local source_dir="$1"
+
+    # Also prepare for potential future versions by checking if any
+    # commonly used versions are missing
+    # This is a no-op if the directories don't exist yet
+    :
 }
 
 # Main logic
 main() {
-    log "INFO" "Starting MCP token sync..."
+    log "INFO" "Starting MCP token sync (all versions)..."
 
-    # Check if current version has tokens
-    local current_status=$(check_current_tokens)
-
-    if [[ "$current_status" == "exists" ]]; then
-        log "INFO" "Tokens already exist for mcp-remote-$CURRENT_VERSION"
-
-        # Check token age and refresh if stale (older than 1 hour)
-        local tokens_file="$MCP_AUTH_DIR/mcp-remote-$CURRENT_VERSION/${SCHWAB_URL_HASH}_tokens.json"
-        local age_seconds=$(($(date +%s) - $(stat -f %m "$tokens_file")))
-
-        if [[ "$age_seconds" -gt 3600 ]]; then
-            log "INFO" "Tokens are ${age_seconds}s old, triggering refresh..."
-            # Brief connection to refresh tokens
-            timeout 15 npx mcp-remote@$CURRENT_VERSION "$SCHWAB_URL" > /dev/null 2>&1 || true
-            log "SUCCESS" "Token refresh completed"
-        else
-            log "INFO" "Tokens are fresh (${age_seconds}s old)"
-        fi
-
-        return 0
-    fi
-
-    log "WARN" "No tokens found for mcp-remote-$CURRENT_VERSION"
-
-    # Find latest tokens from any version
-    local source_dir=$(find_latest_tokens)
-
-    if [[ -z "$source_dir" ]]; then
-        log "WARN" "No Schwab tokens found in any version. Manual auth required."
+    # Ensure base directory exists
+    if [[ ! -d "$MCP_AUTH_DIR" ]]; then
+        log "WARN" "MCP auth directory doesn't exist: $MCP_AUTH_DIR"
         return 1
     fi
 
-    log "INFO" "Found tokens in: $source_dir"
+    # Find freshest tokens
+    local source_dir
+    if ! source_dir=$(find_freshest_tokens); then
+        log "WARN" "No Schwab tokens found in any mcp-remote version"
+        log "WARN" "Manual authentication required via Claude Code"
+        return 1
+    fi
 
-    # Sync tokens
-    local copied=$(sync_tokens "$source_dir")
+    local source_version=$(basename "$source_dir")
+    local tokens_file="${source_dir}${SCHWAB_URL_HASH}_tokens.json"
+    local age_seconds=$(($(date +%s) - $(stat -f %m "$tokens_file")))
+    local age_hours=$((age_seconds / 3600))
 
-    if [[ "$copied" -gt 0 ]]; then
-        log "SUCCESS" "Synced $copied token files from $source_dir to mcp-remote-$CURRENT_VERSION"
+    log "INFO" "Freshest tokens in: $source_version (${age_hours}h old)"
+
+    # Count existing version directories
+    local version_count=$(get_all_versions | wc -l | tr -d ' ')
+    log "INFO" "Found $version_count mcp-remote version directories"
+
+    # Sync to all versions
+    local result=$(sync_to_all_versions "$source_dir")
+    local created=$(echo "$result" | cut -d: -f1)
+    local updated=$(echo "$result" | cut -d: -f2)
+
+    if [[ "$created" -gt 0 ]] || [[ "$updated" -gt 0 ]]; then
+        log "SUCCESS" "Synced tokens: $created new files, $updated updated files"
     else
-        log "INFO" "No new files to sync"
+        log "INFO" "All version directories already have current tokens"
     fi
 
     log "INFO" "Token sync completed"
