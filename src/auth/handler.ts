@@ -149,6 +149,48 @@ async function waitForAuthLockOrTokens(
 }
 
 /**
+ * Create an HTML response with a delayed redirect to give mcp-remote time to start its callback server.
+ * Uses a 2-second delay for reliability across different machines/network conditions.
+ */
+function createDelayedRedirectResponse(redirectTo: string): Response {
+	const delaySeconds = 2 // 2 seconds should be enough for mcp-remote to be ready
+
+	const delayedRedirectHtml = `<!DOCTYPE html>
+<html>
+<head>
+	<title>Authorization Successful</title>
+	<meta http-equiv="refresh" content="${delaySeconds};url=${redirectTo}">
+	<style>
+		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
+		.container { text-align: center; padding: 2rem; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+		.spinner { width: 40px; height: 40px; border: 4px solid #e0e0e0; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+		@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+		h2 { color: #333; margin-bottom: 0.5rem; }
+		p { color: #666; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="spinner"></div>
+		<h2>Authorization Successful</h2>
+		<p>Connecting to Schwab MCP Server...</p>
+	</div>
+	<script>
+		// Fallback redirect after delay if meta refresh doesn't work
+		setTimeout(function() { window.location.href = "${redirectTo}"; }, ${delaySeconds * 1000});
+	</script>
+</body>
+</html>`
+
+	return new Response(delayedRedirectHtml, {
+		status: 200,
+		headers: {
+			'Content-Type': 'text/html; charset=utf-8',
+		},
+	})
+}
+
+/**
  * Check if existing Schwab tokens in KV are valid (not expired)
  * Returns the tokens and schwabUserId if valid, null otherwise
  */
@@ -320,9 +362,9 @@ app.get('/authorize', async (c) => {
 				},
 			)
 
-			// For immediate completion (tokens exist), use direct 302 redirect
-			// mcp-remote just opened the browser and is waiting - no delay needed
-			return Response.redirect(redirectTo, 302)
+			// Use delayed redirect to give mcp-remote time to start its callback server
+			// This prevents the browser from closing immediately before mcp-remote is ready
+			return createDelayedRedirectResponse(redirectTo)
 		}
 
 		// No valid tokens in KV - need to redirect to Schwab OAuth
