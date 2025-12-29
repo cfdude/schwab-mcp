@@ -21,6 +21,10 @@ set -euo pipefail
 MCP_AUTH_DIR="$HOME/.mcp-auth"
 SCHWAB_URL_HASH="cee935839bfcb46a76e0f0d7c68d5afa"  # md5 of https://schwab-mcp-rsherman.onvex.workers.dev/sse
 LOG_FILE="$HOME/Library/Logs/trading/mcp-token-sync.log"
+# Note: We don't clean up old version directories because:
+# 1. Disk usage is negligible (~1-2KB per version)
+# 2. Projects may pin older mcp-remote versions
+# 3. Risk of breaking pinned projects outweighs any benefit
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
