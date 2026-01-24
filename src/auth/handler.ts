@@ -790,4 +790,170 @@ app.get('/callback', async (c) => {
 	}
 })
 
+/**
+ * Re-authentication Endpoint
+ *
+ * GET /reauth - Clears server-side tokens and provides instructions for re-authentication
+ *
+ * This endpoint is designed to be called when a 401 error occurs. It:
+ * 1. Clears all Schwab tokens from KV storage
+ * 2. Provides a simple HTML page with re-auth instructions
+ * 3. Optionally auto-redirects to start the OAuth flow
+ *
+ * Query params:
+ * - auto=true: Automatically trigger OAuth flow after clearing (for browser use)
+ */
+app.get('/reauth', async (c) => {
+	try {
+		const config = getConfig(c.env)
+		const kvToken = makeKvTokenStore(config.OAUTH_KV)
+
+		// Clear all known token keys
+		let tokensCleared = false
+		try {
+			// Clear the stable SCHWAB_CLIENT_ID key
+			await kvToken.clear({ clientId: config.SCHWAB_CLIENT_ID })
+			tokensCleared = true
+			oauthLogger.info('Server-side Schwab tokens cleared via /reauth endpoint')
+		} catch (clearError) {
+			oauthLogger.error('Failed to clear tokens', {
+				error: sanitizeError(clearError),
+			})
+		}
+
+		const html = `<!DOCTYPE html>
+<html>
+<head>
+	<title>Schwab MCP - Re-authentication Required</title>
+	<style>
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			min-height: 100vh;
+			margin: 0;
+			background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+			color: #fff;
+		}
+		.container {
+			text-align: center;
+			padding: 3rem;
+			background: rgba(255, 255, 255, 0.05);
+			border-radius: 16px;
+			box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+			backdrop-filter: blur(10px);
+			max-width: 600px;
+		}
+		.icon {
+			font-size: 4rem;
+			margin-bottom: 1rem;
+		}
+		h1 {
+			margin: 0 0 1rem 0;
+			font-size: 1.5rem;
+		}
+		.status {
+			background: ${tokensCleared ? '#10b981' : '#ef4444'};
+			color: white;
+			padding: 0.5rem 1rem;
+			border-radius: 8px;
+			margin: 1rem 0;
+			display: inline-block;
+		}
+		.instructions {
+			text-align: left;
+			background: rgba(255, 255, 255, 0.1);
+			padding: 1.5rem;
+			border-radius: 8px;
+			margin: 1.5rem 0;
+		}
+		.instructions h3 {
+			margin-top: 0;
+			color: #60a5fa;
+		}
+		.instructions ol {
+			margin: 0;
+			padding-left: 1.5rem;
+		}
+		.instructions li {
+			margin: 0.75rem 0;
+			line-height: 1.5;
+		}
+		.instructions code {
+			background: rgba(0, 0, 0, 0.3);
+			padding: 0.25rem 0.5rem;
+			border-radius: 4px;
+			font-size: 0.9rem;
+			word-break: break-all;
+		}
+		.warning {
+			background: rgba(251, 191, 36, 0.2);
+			border: 1px solid #fbbf24;
+			border-radius: 8px;
+			padding: 1rem;
+			margin: 1rem 0;
+			text-align: left;
+		}
+		.warning h4 {
+			margin: 0 0 0.5rem 0;
+			color: #fbbf24;
+		}
+		.warning p {
+			margin: 0;
+			font-size: 0.9rem;
+		}
+		.note {
+			font-size: 0.9rem;
+			color: #94a3b8;
+			margin-top: 1.5rem;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="icon">🔐</div>
+		<h1>Schwab MCP Re-authentication</h1>
+		<div class="status">
+			${tokensCleared ? '✓ Server tokens cleared successfully' : '⚠ Could not clear tokens'}
+		</div>
+
+		<div class="warning">
+			<h4>⚠️ Important: Order Matters!</h4>
+			<p>You must restart Claude Desktop <strong>before</strong> the OAuth callback will work.
+			The callback redirects to a local server that only runs when Claude Desktop is open.</p>
+		</div>
+
+		<div class="instructions">
+			<h3>Next Steps (follow in order)</h3>
+			<ol>
+				<li><strong>Close this browser tab</strong> (don't complete OAuth yet)</li>
+				<li>Clear your local MCP auth cache in Terminal:
+					<br><code>rm -rf ~/.mcp-auth/mcp-remote-*/</code>
+				</li>
+				<li><strong>Restart Claude Desktop</strong> (Cmd+Q, then reopen)</li>
+				<li>Try to use a Schwab tool in Claude - this will trigger OAuth</li>
+				<li>Complete the Schwab login in the browser that opens</li>
+			</ol>
+		</div>
+
+		<p class="note">
+			<strong>Why this order?</strong> The OAuth callback redirects to localhost where mcp-remote
+			(Claude's MCP handler) listens. If Claude Desktop isn't running, the callback fails with
+			"cannot connect to localhost". Restarting Claude first ensures mcp-remote is ready.
+		</p>
+	</div>
+</body>
+</html>`
+
+		return new Response(html, {
+			status: 200,
+			headers: { 'Content-Type': 'text/html; charset=utf-8' },
+		})
+	} catch (error) {
+		oauthLogger.error('Re-auth endpoint failed', { error: sanitizeError(error) })
+		return c.json({ error: 'Re-authentication failed', message: String(error) }, 500)
+	}
+})
+
 export { app as SchwabHandler }
