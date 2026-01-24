@@ -43,15 +43,21 @@ type MyMCPProps = {
 	clientId?: string
 }
 
-/** Idle timeout in milliseconds (5 minutes) */
+/** Idle timeout in milliseconds (5 minutes of no tool calls) */
 const SSE_IDLE_TIMEOUT_MS = 5 * 60 * 1000
+
+/** Hard timeout - maximum connection duration regardless of activity (30 minutes) */
+const SSE_HARD_TIMEOUT_MS = 30 * 60 * 1000
 
 export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	private tokenManager!: EnhancedTokenManager
 	private client!: SchwabApiClient
 	private validatedConfig!: ValidatedEnv
 	private mcpLogger = logger.child(LOGGER_CONTEXTS.MCP_DO)
-	private lastActivityTimestamp: number = Date.now()
+	/** Timestamp of last actual tool call (not just connection activity) */
+	private lastToolCallTimestamp: number = 0
+	/** Timestamp when this SSE connection was established */
+	private connectionStartTimestamp: number = 0
 	/** Our own reference to the SSE transport for idle timeout management */
 	private sseTransport: { close: () => Promise<void> } | null = null
 
@@ -61,42 +67,79 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 	})
 
 	/**
-	 * Update last activity timestamp and schedule idle timeout alarm.
-	 * Called on SSE connect and every tool call.
+	 * Record a tool call and schedule/update the idle timeout alarm.
+	 * Only called when an actual tool is invoked (not on connection keep-alive).
 	 */
-	private async updateActivity(): Promise<void> {
-		this.lastActivityTimestamp = Date.now()
-		const alarmTime = this.lastActivityTimestamp + SSE_IDLE_TIMEOUT_MS
+	private async recordToolCall(): Promise<void> {
+		this.lastToolCallTimestamp = Date.now()
+		await this.scheduleIdleAlarm()
+	}
+
+	/**
+	 * Schedule the idle timeout alarm based on last tool call or hard timeout.
+	 * Chooses the earlier of: idle timeout (5 min after last tool) or hard timeout (30 min after connect).
+	 */
+	private async scheduleIdleAlarm(): Promise<void> {
+		const now = Date.now()
+
+		// Calculate when each timeout would fire
+		const idleTimeoutAt = this.lastToolCallTimestamp > 0
+			? this.lastToolCallTimestamp + SSE_IDLE_TIMEOUT_MS
+			: now + SSE_IDLE_TIMEOUT_MS // No tool calls yet, use now as baseline
+
+		const hardTimeoutAt = this.connectionStartTimestamp > 0
+			? this.connectionStartTimestamp + SSE_HARD_TIMEOUT_MS
+			: now + SSE_HARD_TIMEOUT_MS
+
+		// Use the earlier timeout
+		const alarmTime = Math.min(idleTimeoutAt, hardTimeoutAt)
+		const alarmType = alarmTime === hardTimeoutAt ? 'hard' : 'idle'
+
 		try {
 			await this.ctx.storage.setAlarm(alarmTime)
-			this.mcpLogger.debug('Idle timeout alarm scheduled', {
-				alarmIn: `${SSE_IDLE_TIMEOUT_MS / 1000}s`,
+			this.mcpLogger.debug('Timeout alarm scheduled', {
+				type: alarmType,
+				alarmInSeconds: Math.floor((alarmTime - now) / 1000),
 			})
 		} catch (error) {
-			this.mcpLogger.warn('Failed to set idle timeout alarm', {
+			this.mcpLogger.warn('Failed to set timeout alarm', {
 				error: error instanceof Error ? error.message : String(error),
 			})
 		}
 	}
 
 	/**
-	 * Durable Object alarm handler - closes SSE connection if idle.
+	 * Durable Object alarm handler - closes SSE connection if idle or hard timeout reached.
 	 * Called by Cloudflare when the scheduled alarm fires.
 	 */
 	async alarm(): Promise<void> {
 		const now = Date.now()
-		const idleTime = now - this.lastActivityTimestamp
-		const isIdle = idleTime >= SSE_IDLE_TIMEOUT_MS
 
-		this.mcpLogger.info('Idle timeout alarm fired', {
-			idleTimeSeconds: Math.floor(idleTime / 1000),
-			isIdle,
+		// Calculate time since last tool call
+		const timeSinceToolCall = this.lastToolCallTimestamp > 0
+			? now - this.lastToolCallTimestamp
+			: now - this.connectionStartTimestamp // No tool calls, use connection start
+
+		// Calculate time since connection started
+		const connectionDuration = this.connectionStartTimestamp > 0
+			? now - this.connectionStartTimestamp
+			: 0
+
+		const isIdleTimeout = timeSinceToolCall >= SSE_IDLE_TIMEOUT_MS
+		const isHardTimeout = connectionDuration >= SSE_HARD_TIMEOUT_MS
+		const shouldClose = isIdleTimeout || isHardTimeout
+
+		this.mcpLogger.info('Timeout alarm fired', {
+			timeSinceToolCallSeconds: Math.floor(timeSinceToolCall / 1000),
+			connectionDurationSeconds: Math.floor(connectionDuration / 1000),
+			isIdleTimeout,
+			isHardTimeout,
+			shouldClose,
 		})
 
-		if (isIdle && this.sseTransport) {
-			this.mcpLogger.info(
-				'Closing idle SSE connection to save DO compute costs',
-			)
+		if (shouldClose && this.sseTransport) {
+			const reason = isHardTimeout ? 'hard timeout (30min max)' : 'idle timeout (5min no tools)'
+			this.mcpLogger.info(`Closing SSE connection: ${reason}`)
 			try {
 				await this.sseTransport.close()
 				this.sseTransport = null
@@ -106,10 +149,10 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 					error: error instanceof Error ? error.message : String(error),
 				})
 			}
-		} else if (!isIdle) {
-			// Activity occurred since alarm was set, reschedule
-			this.mcpLogger.debug('Connection still active, rescheduling alarm')
-			await this.updateActivity()
+		} else if (!shouldClose) {
+			// Connection still active within limits, reschedule alarm
+			this.mcpLogger.debug('Connection still active within limits, rescheduling')
+			await this.scheduleIdleAlarm()
 		}
 	}
 
@@ -158,8 +201,8 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 						? spec.schema.shape
 						: {},
 					async (args: any) => {
-						// Update activity timestamp to reset idle timeout
-						await this.updateActivity()
+						// Record tool call to reset idle timeout (only actual tool usage counts)
+						await this.recordToolCall()
 
 						// Ensure client is initialized before tool execution
 						if (!this.client) {
@@ -704,8 +747,12 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 
 	async onSSE(event: any) {
 		this.mcpLogger.info('SSE connection established or reconnected')
-		// Start idle timeout tracking
-		await this.updateActivity()
+		// Record connection start time for hard timeout
+		this.connectionStartTimestamp = Date.now()
+		// Initialize tool call timestamp (no tools called yet)
+		this.lastToolCallTimestamp = 0
+		// Schedule the initial alarm (will fire at idle timeout since no tools called)
+		await this.scheduleIdleAlarm()
 		await this.onReconnect()
 		const response = await super.onSSE(event)
 		// Capture transport reference for idle timeout management
