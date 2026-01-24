@@ -113,6 +113,23 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 		}
 	}
 
+	/**
+	 * Get the re-authentication URL for this server.
+	 * Constructs the URL from the SCHWAB_REDIRECT_URI by extracting the origin.
+	 *
+	 * @returns The re-auth URL (e.g., https://schwab-mcp.example.com/reauth)
+	 */
+	private getReauthUrl(): string {
+		try {
+			const redirectUri = this.validatedConfig.SCHWAB_REDIRECT_URI
+			const url = new URL(redirectUri)
+			return `${url.origin}/reauth`
+		} catch {
+			// Fallback if URL parsing fails
+			return 'https://your-schwab-mcp-server.com/reauth'
+		}
+	}
+
 	async init() {
 		try {
 			// Register a minimal tool synchronously to ensure Claude Desktop detects tools
@@ -231,9 +248,14 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 											'For order endpoints, ensure session, duration, orderType, orderStrategyType, and orderLegCollection are provided.'
 										break
 									case 401:
+										const reauthUrlForGuidance = this.getReauthUrl()
 										actionableGuidance =
-											'AUTHENTICATION REQUIRED: The access token has expired or is invalid. ' +
-											'Schwab tokens expire after 7 days. Re-authentication is required.'
+											'🔐 AUTHENTICATION REQUIRED: The access token has expired or is invalid.\n\n' +
+											`Quick Re-auth: Visit this URL to clear server tokens and get instructions:\n${reauthUrlForGuidance}\n\n` +
+											'Manual Steps:\n' +
+											'1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n' +
+											'2. Restart Claude Desktop\n' +
+											'3. The OAuth flow will automatically trigger'
 										break
 									case 403:
 										actionableGuidance =
@@ -316,10 +338,16 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 										})
 									}
 
+									// Construct re-auth URL from redirect URI
+									const reauthUrl = this.getReauthUrl()
+
 									errorContent.push({
 										type: 'text' as const,
 										text:
-											`\nTo re-authenticate:\n` +
+											`\n🔐 RE-AUTHENTICATION REQUIRED\n\n` +
+											`Quick Re-auth: Visit this URL to clear server tokens and get instructions:\n` +
+											`${reauthUrl}\n\n` +
+											`Manual Steps:\n` +
 											`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
 											`2. Restart Claude Desktop\n` +
 											`3. The OAuth flow will automatically trigger`,
@@ -332,14 +360,16 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 							// Handle Schwab Auth errors
 							if (isAuthError(error)) {
 								const authError = error as SchwabAuthError
+								const reauthUrl = this.getReauthUrl()
 								errorContent.push({
 									type: 'text' as const,
 									text:
-										`AUTHENTICATION ERROR: ${spec.name} failed\n\n` +
+										`🔐 AUTHENTICATION ERROR: ${spec.name} failed\n\n` +
 										`Code: ${authError.code}\n` +
 										`Message: ${authError.message}\n\n` +
-										`This typically means the authentication tokens need to be refreshed.\n` +
-										`To re-authenticate:\n` +
+										`Quick Re-auth: Visit this URL to clear server tokens and get instructions:\n` +
+										`${reauthUrl}\n\n` +
+										`Manual Steps:\n` +
 										`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
 										`2. Restart Claude Desktop\n` +
 										`3. The OAuth flow will automatically trigger`,
@@ -381,14 +411,16 @@ export class MyMCP extends DurableMCP<MyMCPProps, Env> {
 									})
 								}
 
+								const reauthUrl = this.getReauthUrl()
 								return {
 									content: [
 										{
 											type: 'text' as const,
 											text:
-												`AUTHENTICATION EXPIRED: ${spec.name} failed\n\n` +
-												`Schwab tokens are valid for 7 days.\n\n` +
-												`To re-authenticate:\n` +
+												`🔐 AUTHENTICATION EXPIRED: ${spec.name} failed\n\n` +
+												`Quick Re-auth: Visit this URL to clear server tokens and get instructions:\n` +
+												`${reauthUrl}\n\n` +
+												`Manual Steps:\n` +
 												`1. Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/\n` +
 												`2. Restart Claude Desktop\n` +
 												`3. The OAuth flow will automatically trigger\n\n` +

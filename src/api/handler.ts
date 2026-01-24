@@ -174,8 +174,18 @@ async function createAuthenticatedClient(
 }
 
 /**
- * Wrap API calls with error handling
+ * Get the re-authentication URL for this server.
  */
+function getReauthUrl(env: Env): string {
+	try {
+		const config = getConfig(env)
+		const url = new URL(config.SCHWAB_REDIRECT_URI)
+		return `${url.origin}/reauth`
+	} catch {
+		return '/reauth'
+	}
+}
+
 async function handleApiCall<T>(
 	c: any,
 	operation: string,
@@ -185,12 +195,14 @@ async function handleApiCall<T>(
 		const client = await createAuthenticatedClient(c.env)
 
 		if (!client) {
+			const reauthUrl = getReauthUrl(c.env)
 			return c.json(
 				{
 					error: 'Schwab authentication required',
 					message:
 						'No valid Schwab tokens found. Please authenticate via Claude Code first.',
 					code: 'AUTH_REQUIRED',
+					reauthUrl,
 				},
 				401,
 			)
@@ -210,12 +222,19 @@ async function handleApiCall<T>(
 			message.includes('token')
 		) {
 			apiLogger.warn(`API auth error: ${operation}`, { error: message })
+			const reauthUrl = getReauthUrl(c.env)
 			return c.json(
 				{
 					error: 'Schwab authentication expired',
 					message:
-						'Schwab tokens have expired. Please re-authenticate via Claude Code.',
+						'Schwab tokens have expired. Please re-authenticate.',
 					code: 'AUTH_EXPIRED',
+					reauthUrl,
+					instructions: [
+						`Visit ${reauthUrl} to clear server tokens`,
+						'Clear local cache: rm -rf ~/.mcp-auth/mcp-remote-*/',
+						'Restart Claude Desktop or reconnect MCP',
+					],
 				},
 				401,
 			)
