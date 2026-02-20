@@ -22,13 +22,17 @@ jobs:
           repository: cfdude/schwab-api
           path: schwab-api-sibling
 
-      - name: 🔗 Copy schwab-api to sibling location
-        run: cp -r $GITHUB_WORKSPACE/schwab-api-sibling $GITHUB_WORKSPACE/../schwab-api
-
       - name: ⎔ Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: 🔨 Build schwab-api (generates dist/)
+        working-directory: ./schwab-api-sibling
+        run: npm install && npm run build
+
+      - name: 🔗 Copy schwab-api to sibling location
+        run: cp -r $GITHUB_WORKSPACE/schwab-api-sibling $GITHUB_WORKSPACE/../schwab-api
 
       - name: 📥 Install deps
         run: npm install
@@ -49,13 +53,17 @@ jobs:
           repository: cfdude/schwab-api
           path: schwab-api-sibling
 
-      - name: 🔗 Copy schwab-api to sibling location
-        run: cp -r $GITHUB_WORKSPACE/schwab-api-sibling $GITHUB_WORKSPACE/../schwab-api
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: 🔨 Build schwab-api (generates dist/)
+        working-directory: ./schwab-api-sibling
+        run: npm install && npm run build
+
+      - name: 🔗 Copy schwab-api to sibling location
+        run: cp -r $GITHUB_WORKSPACE/schwab-api-sibling $GITHUB_WORKSPACE/../schwab-api
 
       - name: Install Dependencies
         run: npm install
