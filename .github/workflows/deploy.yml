@@ -16,6 +16,12 @@ jobs:
       - name: ⬇️ Checkout repo
         uses: actions/checkout@v4
 
+      - name: ⬇️ Checkout schwab-api (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: cfdude/schwab-api
+          path: ../schwab-api
+
       - name: ⎔ Setup node
         uses: actions/setup-node@v4
         with:
@@ -23,8 +29,6 @@ jobs:
 
       - name: 📥 Download deps
         uses: bahmutov/npm-install@v1
-        with:
-          useLockFile: false
 
       - name: 🔍 Validate
         run: npm run validate
