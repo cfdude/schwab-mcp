@@ -20,7 +20,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: cfdude/schwab-api
-          path: ../schwab-api
+          path: schwab-api-sibling
+
+      - name: 🔗 Create sibling symlink for schwab-api
+        run: ln -sf $GITHUB_WORKSPACE/schwab-api-sibling $GITHUB_WORKSPACE/../schwab-api
 
       - name: ⎔ Setup node
         uses: actions/setup-node@v4
