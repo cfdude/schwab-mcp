@@ -22,16 +22,16 @@ jobs:
           repository: cfdude/schwab-api
           path: schwab-api-sibling
 
-      - name: 🔗 Create sibling symlink for schwab-api
-        run: ln -sf $GITHUB_WORKSPACE/schwab-api-sibling $GITHUB_WORKSPACE/../schwab-api
+      - name: 🔗 Copy schwab-api to sibling location
+        run: cp -r $GITHUB_WORKSPACE/schwab-api-sibling $GITHUB_WORKSPACE/../schwab-api
 
       - name: ⎔ Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: 📥 Download deps
-        uses: bahmutov/npm-install@v1
+      - name: 📥 Install deps
+        run: npm install
 
       - name: 🔍 Validate
         run: npm run validate
@@ -43,14 +43,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: ⬇️ Checkout schwab-api (sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: cfdude/schwab-api
+          path: schwab-api-sibling
+
+      - name: 🔗 Copy schwab-api to sibling location
+        run: cp -r $GITHUB_WORKSPACE/schwab-api-sibling $GITHUB_WORKSPACE/../schwab-api
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Validate
         run: npm run validate
