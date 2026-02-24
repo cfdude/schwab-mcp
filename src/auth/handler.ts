@@ -149,40 +149,126 @@ async function waitForAuthLockOrTokens(
 }
 
 /**
- * Create an HTML response with a delayed redirect to give mcp-remote time to start its callback server.
- * Uses a 2-second delay for reliability across different machines/network conditions.
+ * Create a smart redirect response that verifies mcp-remote's local callback server
+ * is reachable before redirecting. If unreachable, retries with backoff and shows
+ * clear fallback instructions since tokens are already saved server-side.
  */
-function createDelayedRedirectResponse(redirectTo: string): Response {
-	const delaySeconds = 2 // 2 seconds should be enough for mcp-remote to be ready
-
-	const delayedRedirectHtml = `<!DOCTYPE html>
+function createSmartRedirectResponse(redirectTo: string): Response {
+	const html = `<!DOCTYPE html>
 <html>
 <head>
 	<title>Authorization Successful</title>
-	<meta http-equiv="refresh" content="${delaySeconds};url=${redirectTo}">
 	<style>
-		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
-		.container { text-align: center; padding: 2rem; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+		body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
+		.container { text-align: center; padding: 2rem; background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 500px; margin: 1rem; }
 		.spinner { width: 40px; height: 40px; border: 4px solid #e0e0e0; border-top: 4px solid #007bff; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
 		@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 		h2 { color: #333; margin-bottom: 0.5rem; }
-		p { color: #666; }
+		p { color: #666; line-height: 1.5; }
+		.status { font-size: 0.9rem; color: #888; margin-top: 1rem; }
+		.success { color: #28a745; }
+		.warning { color: #dc3545; }
+		.fallback { display: none; text-align: left; margin-top: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #ffc107; }
+		.fallback h3 { color: #333; margin: 0 0 0.5rem 0; font-size: 1rem; }
+		.fallback ol { margin: 0.5rem 0; padding-left: 1.5rem; }
+		.fallback li { margin: 0.3rem 0; color: #555; font-size: 0.9rem; }
+		.fallback .good-news { color: #28a745; font-weight: 600; margin-bottom: 0.5rem; }
+		.retry-btn { display: none; margin-top: 1rem; padding: 0.5rem 1.5rem; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+		.retry-btn:hover { background: #0056b3; }
 	</style>
 </head>
 <body>
 	<div class="container">
-		<div class="spinner"></div>
-		<h2>Authorization Successful</h2>
-		<p>Connecting to Schwab MCP Server...</p>
+		<div class="spinner" id="spinner"></div>
+		<h2 id="title">Authorization Successful</h2>
+		<p id="message">Verifying local connection...</p>
+		<p class="status" id="status">Attempt 1 of 5</p>
+		<div class="fallback" id="fallback">
+			<p class="good-news">Your Schwab tokens are saved on the server.</p>
+			<h3>The local callback server isn't responding. To connect:</h3>
+			<ol>
+				<li>Make sure Claude Desktop or Claude Code is running</li>
+				<li>Restart the application to trigger a fresh MCP connection</li>
+				<li>The server will find your saved tokens automatically</li>
+			</ol>
+		</div>
+		<button class="retry-btn" id="retryBtn" onclick="startRetry()">Try Again</button>
 	</div>
 	<script>
-		// Fallback redirect after delay if meta refresh doesn't work
-		setTimeout(function() { window.location.href = "${redirectTo}"; }, ${delaySeconds * 1000});
+		const redirectUrl = ${JSON.stringify(redirectTo)};
+		let attempt = 0;
+		const maxAttempts = 5;
+		const delays = [1000, 2000, 3000, 4000, 5000]; // backoff
+
+		function updateStatus(msg, className) {
+			const el = document.getElementById('status');
+			el.textContent = msg;
+			el.className = 'status ' + (className || '');
+		}
+
+		async function tryRedirect() {
+			attempt++;
+			updateStatus('Attempt ' + attempt + ' of ' + maxAttempts);
+			document.getElementById('message').textContent = 'Checking if Claude is ready to receive the callback...';
+
+			try {
+				// Extract just the origin + path from the redirect URL to probe
+				const url = new URL(redirectUrl);
+				const probeUrl = url.origin;
+
+				// Try to reach the local callback server
+				// We use a short timeout and mode: no-cors since the server may not have CORS headers
+				const controller = new AbortController();
+				const timeout = setTimeout(() => controller.abort(), 3000);
+
+				await fetch(probeUrl, {
+					method: 'HEAD',
+					mode: 'no-cors',
+					signal: controller.signal
+				});
+				clearTimeout(timeout);
+
+				// If we get here (even opaque response), the server is listening
+				updateStatus('Connected! Redirecting...', 'success');
+				document.getElementById('message').textContent = 'Local server is ready. Completing authentication...';
+
+				// Small delay then redirect
+				setTimeout(function() {
+					window.location.href = redirectUrl;
+				}, 500);
+
+			} catch (err) {
+				if (attempt < maxAttempts) {
+					updateStatus('Local server not ready, retrying in ' + (delays[attempt - 1] / 1000) + 's... (attempt ' + attempt + '/' + maxAttempts + ')');
+					setTimeout(tryRedirect, delays[attempt - 1]);
+				} else {
+					// All attempts failed - show fallback
+					document.getElementById('spinner').style.display = 'none';
+					document.getElementById('title').textContent = 'Almost Done';
+					document.getElementById('message').textContent = '';
+					updateStatus('Could not reach local callback server after ' + maxAttempts + ' attempts', 'warning');
+					document.getElementById('fallback').style.display = 'block';
+					document.getElementById('retryBtn').style.display = 'inline-block';
+				}
+			}
+		}
+
+		function startRetry() {
+			attempt = 0;
+			document.getElementById('spinner').style.display = 'block';
+			document.getElementById('title').textContent = 'Authorization Successful';
+			document.getElementById('fallback').style.display = 'none';
+			document.getElementById('retryBtn').style.display = 'none';
+			tryRedirect();
+		}
+
+		// Start immediately
+		tryRedirect();
 	</script>
 </body>
-</html>`
+</html>`;
 
-	return new Response(delayedRedirectHtml, {
+	return new Response(html, {
 		status: 200,
 		headers: {
 			'Content-Type': 'text/html; charset=utf-8',
@@ -362,9 +448,8 @@ app.get('/authorize', async (c) => {
 				},
 			)
 
-			// Use delayed redirect to give mcp-remote time to start its callback server
-			// This prevents the browser from closing immediately before mcp-remote is ready
-			return createDelayedRedirectResponse(redirectTo)
+			// Use smart redirect that verifies mcp-remote is listening before redirecting
+			return createSmartRedirectResponse(redirectTo)
 		}
 
 		// No valid tokens in KV - need to redirect to Schwab OAuth
@@ -407,8 +492,8 @@ app.get('/authorize', async (c) => {
 					},
 				)
 
-				// Direct 302 redirect - mcp-remote is waiting and ready
-				return Response.redirect(redirectTo, 302)
+				// Use smart redirect that verifies mcp-remote is listening before redirecting
+				return createSmartRedirectResponse(redirectTo)
 			}
 
 			// Timed out waiting - try to acquire lock and proceed
@@ -730,7 +815,10 @@ app.get('/callback', async (c) => {
 		await releaseAuthLock(config.OAUTH_KV, clientIdFromState)
 		oauthLogger.info('Auth callback completed, lock released')
 
-		return Response.redirect(redirectTo)
+		// Use smart redirect that verifies mcp-remote is listening before redirecting
+		// At this point Schwab tokens are already saved in KV, so even if the redirect
+		// fails, the user can reconnect by restarting Claude and tokens will be found
+		return createSmartRedirectResponse(redirectTo)
 	} catch (error) {
 		const isSchwabAuthError = error instanceof SchwabAuthError
 		const isSchwabApiErrorInstance = error instanceof SchwabApiError
