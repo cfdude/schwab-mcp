@@ -5,7 +5,6 @@ import {
 	GetAccountNumbersParams,
 	GetOrdersParams,
 	GetAccountsParams,
-	GetOrdersByAccountParams,
 	PlaceOrderParams,
 	GetOrderByIdParams,
 	CancelOrderParams,
@@ -13,9 +12,86 @@ import {
 	GetTransactionsParams,
 	GetTransactionByIdParams,
 	GetUserPreferenceParams,
+	type SchwabApiClient,
 } from '@sudowealth/schwab-api'
+import { z } from 'zod'
 import { logger } from '../../shared/log'
 import { createToolSpec } from '../types'
+
+/**
+ * Filter orders by ticker symbol (case-insensitive).
+ * Matches against instrument.symbol in any leg of the order.
+ */
+function filterOrdersBySymbol(orders: any[], symbol: string): any[] {
+	const upperSymbol = symbol.toUpperCase()
+	return orders.filter((order: any) =>
+		order.orderLegCollection?.some(
+			(leg: any) =>
+				leg.instrument?.symbol?.toUpperCase() === upperSymbol,
+		),
+	)
+}
+
+/**
+ * Build a map of raw numeric accountNumber → encrypted hashValue.
+ * This lets us enrich orders with the hash the AI needs for follow-up calls.
+ */
+async function buildAccountHashMap(
+	client: SchwabApiClient,
+): Promise<Record<string, string>> {
+	const accounts = await client.trader.accounts.getAccountNumbers()
+	const map: Record<string, string> = {}
+	for (const acc of accounts) {
+		map[acc.accountNumber] = acc.hashValue
+	}
+	return map
+}
+
+/**
+ * Process orders: scrub sensitive data, then add accountHash afterward.
+ * Adding accountHash AFTER scrubbing prevents the scrubber from replacing
+ * the hash value with the display name (since hashes are in the display map).
+ *
+ * Every order in the output will have:
+ * - accountHash: encrypted ID for API calls (cancelOrder, replaceOrder, etc.)
+ * - accountDisplay: friendly name for user display (e.g., "Rob stock ...964")
+ */
+async function processOrders(
+	client: SchwabApiClient,
+	orders: any[],
+): Promise<any> {
+	// Capture raw accountNumber → hash mapping BEFORE scrubbing removes them
+	const hashMap = await buildAccountHashMap(client)
+	const orderHashLookup = orders.map((order: any) =>
+		hashMap[String(order.accountNumber)],
+	)
+
+	// Scrub removes raw accountNumber, adds accountDisplay
+	const displayMap = await buildAccountDisplayMap(client)
+	const scrubbed = scrubAccountIdentifiers(orders, displayMap) as any[]
+
+	// Add accountHash AFTER scrubbing so it doesn't get replaced
+	return scrubbed.map((order: any, i: number) => ({
+		accountHash: orderHashLookup[i],
+		...order,
+	}))
+}
+
+/** Extended getOrders params with optional symbol filter and optional account */
+const GetOrdersWithFilterParams = GetOrdersParams.extend({
+	symbol: z
+		.string()
+		.optional()
+		.describe(
+			'Filter orders by ticker symbol (e.g., AAPL, LRCX). Client-side filter applied after fetch.',
+		),
+	accountNumber: z
+		.string()
+		.optional()
+		.describe(
+			'Encrypted account number. If provided, only returns orders for this account.',
+		),
+})
 
 export const toolSpecs = [
 	createToolSpec({
@@ -66,29 +142,39 @@ export const toolSpecs = [
 	}),
 	createToolSpec({
 		name: 'getOrders',
-		description: 'Get orders',
-		schema: GetOrdersParams,
+		description:
+			'Get orders. Optionally filter by account number and/or ticker symbol to reduce response size.',
+		schema: GetOrdersWithFilterParams,
 		call: async (c, p) => {
+			const { symbol, accountNumber, ...queryParams } = p
 			logger.info('[getOrders] Fetching orders', {
-				maxResults: p.maxResults,
-				hasDateFilter: !!p.fromEnteredTime || !!p.toEnteredTime,
+				maxResults: queryParams.maxResults,
+				hasDateFilter: !!queryParams.fromEnteredTime || !!queryParams.toEnteredTime,
+				symbol: symbol || 'all',
+				accountScoped: !!accountNumber,
 			})
-			const orders = await c.trader.orders.getOrders({ queryParams: p })
-			const displayMap = await buildAccountDisplayMap(c)
-			return scrubAccountIdentifiers(orders, displayMap)
-		},
-	}),
-	createToolSpec({
-		name: 'getOrdersByAccountNumber',
-		description: 'Get orders by account number',
-		schema: GetOrdersByAccountParams,
-		call: async (c, p) => {
-			const orders = await c.trader.orders.getOrdersByAccount({
-				pathParams: { accountNumber: p.accountNumber },
-				queryParams: p,
-			})
-			const displayMap = await buildAccountDisplayMap(c)
-			return scrubAccountIdentifiers(orders, displayMap)
+
+			let orders: any[]
+			if (accountNumber) {
+				orders = await c.trader.orders.getOrdersByAccount({
+					pathParams: { accountNumber },
+					queryParams,
+				})
+			} else {
+				orders = await c.trader.orders.getOrders({ queryParams })
+			}
+
+			if (symbol) {
+				const preFilterCount = orders.length
+				orders = filterOrdersBySymbol(orders, symbol)
+				logger.info('[getOrders] Symbol filter applied', {
+					symbol,
+					before: preFilterCount,
+					after: orders.length,
+				})
+			}
+
+			return processOrders(c, orders)
 		},
 	}),
 	createToolSpec({
@@ -112,8 +198,7 @@ export const toolSpecs = [
 			const order = await c.trader.orders.getOrderByOrderId({
 				pathParams: { accountNumber: p.accountNumber, orderId: p.orderId },
 			})
-			const displayMap = await buildAccountDisplayMap(c)
-			return scrubAccountIdentifiers(order, displayMap)
+			return processOrders(c, [order]).then((orders: any[]) => orders[0])
 		},
 	}),
 	createToolSpec({
