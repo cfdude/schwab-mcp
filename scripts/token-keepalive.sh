@@ -13,7 +13,8 @@ set -euo pipefail
 
 # Configuration
 API_URL="https://schwab-mcp-rsherman.onvex.workers.dev"
-API_KEY="${SCHWAB_API_KEY:-***REDACTED-SCHWAB-API-KEY***}"
+# API key MUST be supplied via the environment — never hardcode secrets in a tracked file.
+API_KEY="${SCHWAB_API_KEY:?SCHWAB_API_KEY environment variable is required (export it before running)}"
 LOG_FILE="${HOME}/schwab-keepalive.log"
 ALERT_THRESHOLD_HOURS=48  # Alert if tokens expire within this many hours
 LOG_ROTATION_DAYS=30      # Rotate log after this many days
