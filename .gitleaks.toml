@@ -1,0 +1,10 @@
+# gitleaks config — secret guard for the (PUBLIC) schwab-mcp worker repo.
+# Pre-commit runs `gitleaks git --staged` in addition to git-secrets.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-safe non-secret patterns"
+regexes = [
+  '''schwab-mcp-rsherman\.onvex\.workers\.dev''',
+]
