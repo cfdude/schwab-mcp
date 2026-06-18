@@ -290,6 +290,77 @@ api.get('/status', async (c) => {
 })
 
 /**
+ * GET /api/access-token - Vend a short-lived Schwab ACCESS token (hybrid token model).
+ *
+ * Returns a currently-valid Schwab access token, refreshing it from the KV refresh token
+ * when needed (the refresh token NEVER leaves KV). Local schwab-py clients inject this
+ * access token (access-token-ONLY — the refresh token is deliberately omitted) so they
+ * never self-refresh against Schwab. The worker remains the sole OAuth authorizer.
+ * See the `schwab-unified-token` change (hybrid architecture).
+ */
+api.get('/access-token', async (c) => {
+	const config = getConfig(c.env)
+	const kvToken = makeKvTokenStore(config.OAUTH_KV)
+
+	const loadToken = async (): Promise<TokenData | null> =>
+		await kvToken.load({ clientId: config.SCHWAB_CLIENT_ID })
+	const saveToken = async (data: TokenData) => {
+		await kvToken.save({ clientId: config.SCHWAB_CLIENT_ID }, data)
+		apiLogger.debug('Token refreshed and saved to KV (access-token vend)')
+	}
+
+	const tokenManager = initializeSchwabAuthClient(
+		config,
+		config.SCHWAB_REDIRECT_URI,
+		loadToken,
+		saveToken,
+	)
+
+	try {
+		// initialize() loads + validates + refreshes-if-needed, persisting via saveToken → KV.
+		await tokenManager.initialize()
+		// Re-read the AUTHORITATIVE token from KV (the manager's getTokenData() reports a
+		// wall-clock-tracking expiresAt; KV holds the real expiry, same source as /status).
+		const td = await kvToken.load({ clientId: config.SCHWAB_CLIENT_ID })
+		if (!td || !td.accessToken) {
+			return c.json(
+				{
+					error: 'Schwab authentication required',
+					code: 'AUTH_REQUIRED',
+					message:
+						'No valid Schwab access token. Re-authenticate via the worker OAuth flow.',
+					reauthUrl: getReauthUrl(c.env),
+				},
+				401,
+			)
+		}
+		const now = Date.now()
+		const expiresAt = td.expiresAt ?? now
+		const expiresIn = Math.max(0, Math.floor((expiresAt - now) / 1000))
+		// Deliberately NO refresh_token in the response — access-token-only (C-1 invariant).
+		return c.json({
+			access_token: td.accessToken,
+			token_type: 'Bearer',
+			expires_at: new Date(expiresAt).toISOString(),
+			expires_in_seconds: expiresIn,
+		})
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error)
+		apiLogger.warn('access-token vend failed', { error: message })
+		return c.json(
+			{
+				error: 'Schwab authentication expired',
+				code: 'AUTH_EXPIRED',
+				message:
+					'Could not mint a Schwab access token (refresh token dead?). Re-authenticate via the worker OAuth flow.',
+				reauthUrl: getReauthUrl(c.env),
+			},
+			401,
+		)
+	}
+})
+
+/**
  * GET /api/accounts - Get all accounts with positions
  */
 api.get('/accounts', async (c) => {
