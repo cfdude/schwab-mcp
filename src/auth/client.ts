@@ -59,7 +59,12 @@ export function initializeSchwabAuthClient(
 		autoReconnect: true,
 		debug: config.LOG_LEVEL === 'debug' || config.LOG_LEVEL === 'trace',
 		traceOperations: config.LOG_LEVEL === 'trace',
-		refreshThresholdMs: 5 * 60 * 1000,
+		// 7 min — MUST exceed the CLIENT's authlib leeway (300s in schwab-py: personal-finance
+		// schwab/auth.py). At exactly 300s the token manager would serve a cached token that the
+		// client considers already-expired (authlib InvalidTokenError → a weekly false
+		// "re-authenticate" alarm). Refreshing above the leeway guarantees a vended token is always
+		// usable client-side. See personal-finance change schwab-token-expiry-false-positive.
+		refreshThresholdMs: 7 * 60 * 1000,
 	}
 
 	// Configure auth with enhanced token manager
